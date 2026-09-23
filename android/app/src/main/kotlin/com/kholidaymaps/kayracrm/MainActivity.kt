@@ -1,4 +1,4 @@
-package com.example.kayra_crm_v1
+package com.kholidaymaps.kayracrm
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -1,11 +1,11 @@
 {
-    "name": "kayra_crm_v1",
-    "short_name": "kayra_crm_v1",
+    "name": "Kayra Holiday Maps",
+    "short_name": "Kayra Holiday Maps",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Kayra Holiday Maps workspace.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
