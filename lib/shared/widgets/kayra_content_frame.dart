@@ -4,9 +4,14 @@ import '../../core/layout/app_layout.dart';
 import '../../core/theme/app_spacing.dart';
 
 class KayraContentFrame extends StatelessWidget {
-  const KayraContentFrame({super.key, required this.child});
+  const KayraContentFrame({
+    super.key,
+    required this.child,
+    this.maxWidth = AppLayout.maxContentWidth,
+  });
 
   final Widget child;
+  final double maxWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -21,9 +26,7 @@ class KayraContentFrame extends StatelessWidget {
           child: Align(
             alignment: Alignment.topCenter,
             child: ConstrainedBox(
-              constraints: const BoxConstraints(
-                maxWidth: AppLayout.maxContentWidth,
-              ),
+              constraints: BoxConstraints(maxWidth: maxWidth),
               child: SizedBox(width: double.infinity, child: child),
             ),
           ),

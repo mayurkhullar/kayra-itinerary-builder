@@ -16,6 +16,7 @@ class KayraAppHeader extends StatelessWidget {
     required this.onSignOut,
     required this.onPreviewAction,
     this.isSigningOut = false,
+    this.maxContentWidth = AppLayout.maxContentWidth,
   });
 
   final String? displayName;
@@ -25,6 +26,7 @@ class KayraAppHeader extends StatelessWidget {
   final VoidCallback onSignOut;
   final VoidCallback onPreviewAction;
   final bool isSigningOut;
+  final double maxContentWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -48,9 +50,7 @@ class KayraAppHeader extends StatelessWidget {
             padding: EdgeInsets.symmetric(horizontal: padding),
             child: Center(
               child: ConstrainedBox(
-                constraints: const BoxConstraints(
-                  maxWidth: AppLayout.maxContentWidth,
-                ),
+                constraints: BoxConstraints(maxWidth: maxContentWidth),
                 child: ConstrainedBox(
                   constraints: BoxConstraints(
                     minHeight: isMobile
@@ -76,7 +76,7 @@ class KayraAppHeader extends StatelessWidget {
                         const Spacer(),
                         const SizedBox(width: AppSpacing.s8),
                         IconButton(
-                          tooltip: 'Notifications preview',
+                          tooltip: 'Notifications',
                           onPressed: onPreviewAction,
                           icon: const Icon(Icons.notifications_none_rounded),
                         ),
@@ -95,7 +95,7 @@ class KayraAppHeader extends StatelessWidget {
                         if (!showNavigation) ...[
                           const SizedBox(width: AppSpacing.s4),
                           IconButton(
-                            tooltip: 'Menu preview',
+                            tooltip: 'Menu',
                             onPressed: onPreviewAction,
                             icon: const Icon(Icons.menu_rounded),
                           ),

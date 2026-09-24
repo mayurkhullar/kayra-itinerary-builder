@@ -6,6 +6,7 @@ import 'package:kayra_crm_v1/app/app.dart';
 import 'package:kayra_crm_v1/features/auth/data/auth_service.dart';
 import 'package:kayra_crm_v1/features/auth/presentation/pages/sign_in_page.dart';
 import 'package:kayra_crm_v1/features/users/domain/kayra_user.dart';
+import 'package:kayra_crm_v1/features/dashboard/presentation/pages/dashboard_page.dart';
 
 import 'support/fake_auth_service.dart';
 import 'support/fake_user_profile_repository.dart';
@@ -33,7 +34,7 @@ void main() {
     await showApp(tester, auth);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(find.byType(SignInPage), findsNothing);
-    expect(find.text('Good to see you.'), findsNothing);
+    expect(find.byType(DashboardPage), findsNothing);
 
     auth.emit(null);
     await tester.pumpAndSettle();
@@ -45,7 +46,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(SignInPage), findsOneWidget);
     expect(find.text('Continue with Google'), findsOneWidget);
-    expect(find.text('Good to see you.'), findsNothing);
+    expect(find.byType(DashboardPage), findsNothing);
   });
 
   testWidgets('Valid restored session shows workspace and account menu', (
@@ -56,7 +57,7 @@ void main() {
     );
     await showApp(tester, auth);
     await tester.pumpAndSettle();
-    expect(find.text('Good to see you.'), findsOneWidget);
+    expect(find.byType(DashboardPage), findsOneWidget);
     expect(find.byType(SignInPage), findsNothing);
     expect(find.text('maya@kholidaymaps.com'), findsNothing);
     await tester.tap(find.byTooltip('Account menu'));
@@ -66,7 +67,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(auth.signOutCalls, 1);
     expect(find.byType(SignInPage), findsOneWidget);
-    expect(find.text('Good to see you.'), findsNothing);
+    expect(find.byType(DashboardPage), findsNothing);
   });
 
   testWidgets('Rejects restored external account before rendering workspace', (
@@ -76,7 +77,7 @@ void main() {
     final auth = FakeAuthService(user: TestUser(email: 'maya@example.com'));
     auth.onSignOut = () => cleanup.future;
     await showApp(tester, auth);
-    expect(find.text('Good to see you.'), findsNothing);
+    expect(find.byType(DashboardPage), findsNothing);
     expect(find.text(AuthService.domainError), findsOneWidget);
     expect(auth.signOutCalls, 1);
     auth.emit(null);
@@ -95,7 +96,7 @@ void main() {
     auth.onSignOut = () async => throw Exception('private SDK detail');
     await showApp(tester, auth);
     await tester.pumpAndSettle();
-    expect(find.text('Good to see you.'), findsNothing);
+    expect(find.byType(DashboardPage), findsNothing);
     expect(find.text(AuthService.domainError), findsOneWidget);
     expect(find.textContaining('private SDK detail'), findsNothing);
   });
@@ -115,10 +116,10 @@ void main() {
     expect(auth.signInCalls, 1);
     auth.emit(TestUser());
     await tester.pump();
-    expect(find.text('Good to see you.'), findsNothing);
+    expect(find.byType(DashboardPage), findsNothing);
     popup.complete();
     await tester.pumpAndSettle();
-    expect(find.text('Good to see you.'), findsOneWidget);
+    expect(find.byType(DashboardPage), findsOneWidget);
   });
 
   testWidgets(
@@ -133,7 +134,7 @@ void main() {
       await tester.tap(find.text('Continue with Google'));
       await tester.pumpAndSettle();
       expect(auth.signOutCalls, 1);
-      expect(find.text('Good to see you.'), findsNothing);
+      expect(find.byType(DashboardPage), findsNothing);
       expect(find.text(AuthService.domainError), findsOneWidget);
     },
   );
@@ -156,7 +157,7 @@ void main() {
     auth.onGoogleSignIn = () async => auth.emit(TestUser());
     await tester.tap(find.text('Continue with Google'));
     await tester.pumpAndSettle();
-    expect(find.text('Good to see you.'), findsOneWidget);
+    expect(find.byType(DashboardPage), findsOneWidget);
   });
 
   testWidgets('Session errors never expose technical details or workspace', (
@@ -171,7 +172,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.textContaining('Firebase private diagnostic'), findsNothing);
-    expect(find.text('Good to see you.'), findsNothing);
+    expect(find.byType(DashboardPage), findsNothing);
   });
 
   testWidgets('Waits for an active profile before opening the workspace', (
@@ -183,10 +184,10 @@ void main() {
       ..onBootstrap = (_) => pending.future;
     await showApp(tester, FakeAuthService(user: user), profiles: profiles);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
-    expect(find.text('Good to see you.'), findsNothing);
+    expect(find.byType(DashboardPage), findsNothing);
     pending.complete(testProfile(user));
     await tester.pumpAndSettle();
-    expect(find.text('Good to see you.'), findsOneWidget);
+    expect(find.byType(DashboardPage), findsOneWidget);
   });
 
   testWidgets(
@@ -204,13 +205,13 @@ void main() {
         findsOneWidget,
       );
       expect(find.textContaining('private Firestore diagnostic'), findsNothing);
-      expect(find.text('Good to see you.'), findsNothing);
+      expect(find.byType(DashboardPage), findsNothing);
       profiles.onBootstrap = (_) async => testProfile(user);
       await tester.tap(find.text('Try again'));
       await tester.pumpAndSettle();
       expect(profiles.calls.length, 2);
       expect(auth.signInCalls, 0);
-      expect(find.text('Good to see you.'), findsOneWidget);
+      expect(find.byType(DashboardPage), findsOneWidget);
     },
   );
 
@@ -223,7 +224,7 @@ void main() {
           testProfile(user, status: KayraUserStatus.inactive);
     await showApp(tester, auth, profiles: profiles);
     await tester.pumpAndSettle();
-    expect(find.text('Good to see you.'), findsNothing);
+    expect(find.byType(DashboardPage), findsNothing);
     expect(
       find.text(
         'Your Kayra account is inactive. Please contact your administrator.',
@@ -264,7 +265,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(profiles.calls, isEmpty);
-    expect(find.text('Good to see you.'), findsNothing);
+    expect(find.byType(DashboardPage), findsNothing);
   });
 
   testWidgets('Duplicate auth events do not repeat profile bootstrap', (
@@ -294,7 +295,7 @@ void main() {
     pending.complete(testProfile(user));
     await tester.pumpAndSettle();
     expect(find.byType(SignInPage), findsOneWidget);
-    expect(find.text('Good to see you.'), findsNothing);
+    expect(find.byType(DashboardPage), findsNothing);
   });
 
   testWidgets('An earlier profile cannot replace the current user profile', (
@@ -316,7 +317,7 @@ void main() {
     await tester.pumpAndSettle();
     pending.complete(testProfile(first));
     await tester.pumpAndSettle();
-    expect(find.text('Good to see you.'), findsNothing);
+    expect(find.byType(DashboardPage), findsNothing);
     expect(
       find.text(
         'Your Kayra account is inactive. Please contact your administrator.',
@@ -348,7 +349,7 @@ void main() {
     oldRetry();
     await tester.pumpAndSettle();
     expect(profiles.calls.length, 2);
-    expect(find.text('Good to see you.'), findsNothing);
+    expect(find.byType(DashboardPage), findsNothing);
     expect(
       find.text(
         'Your Kayra account is inactive. Please contact your administrator.',
@@ -366,7 +367,7 @@ void main() {
       profiles: profiles,
     );
     await tester.pumpAndSettle();
-    expect(find.text('Good to see you.'), findsNothing);
+    expect(find.byType(DashboardPage), findsNothing);
     expect(find.text('Try again'), findsOneWidget);
   });
 
