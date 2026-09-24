@@ -204,6 +204,7 @@ class _AuthGateState extends State<AuthGate> {
       }
       return DashboardPage(
         user: profile,
+        userProfileRepository: _profiles,
         onSignOut: _signOut,
         isSigningOut: _isSigningOut,
       );

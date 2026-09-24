@@ -5,6 +5,7 @@ import '../domain/kayra_user.dart';
 
 abstract class UserProfileRepository {
   Future<KayraUser> bootstrap(User firebaseUser);
+  Future<List<KayraUser>> listUsers();
 }
 
 class FirestoreUserProfileRepository implements UserProfileRepository {
@@ -16,6 +17,34 @@ class FirestoreUserProfileRepository implements UserProfileRepository {
   @override
   Future<KayraUser> bootstrap(User firebaseUser) =>
       _bootstrap(firebaseUser).timeout(const Duration(seconds: 30));
+
+  /// A server-only read: Firestore rules authorize the authenticated caller.
+  @override
+  Future<List<KayraUser>> listUsers() async {
+    final snapshot = await _firestore
+        .collection('users')
+        .get(const GetOptions(source: Source.server))
+        .timeout(const Duration(seconds: 30));
+    final users = snapshot.docs
+        .map(
+          (document) => _readProfile(
+            document,
+            expectedUid: document.id,
+            allowMissingLastLoginAt: true,
+          ),
+        )
+        .toList();
+    users.sort((a, b) {
+      if (a.isActive != b.isActive) return a.isActive ? -1 : 1;
+      final nameOrder = a.displayLabel.toLowerCase().compareTo(
+        b.displayLabel.toLowerCase(),
+      );
+      if (nameOrder != 0) return nameOrder;
+      final emailOrder = a.email.compareTo(b.email);
+      return emailOrder != 0 ? emailOrder : a.uid.compareTo(b.uid);
+    });
+    return List.unmodifiable(users);
+  }
 
   Future<KayraUser> _bootstrap(User firebaseUser) async {
     final uid = firebaseUser.uid;
@@ -68,7 +97,8 @@ class FirestoreUserProfileRepository implements UserProfileRepository {
   KayraUser _readProfile(
     DocumentSnapshot<Map<String, dynamic>> snapshot, {
     required String expectedUid,
-    required String expectedEmail,
+    String? expectedEmail,
+    bool allowMissingLastLoginAt = false,
   }) {
     final data = snapshot.data();
     if (!snapshot.exists || data == null || snapshot.id != expectedUid) {
@@ -76,16 +106,22 @@ class FirestoreUserProfileRepository implements UserProfileRepository {
     }
     final createdAt = data['createdAt'];
     final lastLoginAt = data['lastLoginAt'];
-    if (createdAt is! Timestamp || lastLoginAt is! Timestamp) {
+    if (createdAt is! Timestamp ||
+        (lastLoginAt is! Timestamp &&
+            !(allowMissingLastLoginAt && lastLoginAt == null))) {
       throw const FormatException('User profile timestamps are unavailable.');
     }
 
-    final profile = KayraUser.fromMap({
-      ...data,
-      'createdAt': createdAt.toDate().toUtc(),
-      'lastLoginAt': lastLoginAt.toDate().toUtc(),
-    }, documentId: expectedUid);
-    if (profile.email != expectedEmail) {
+    final profile = KayraUser.fromMap(
+      {
+        ...data,
+        'createdAt': createdAt.toDate().toUtc(),
+        'lastLoginAt': (lastLoginAt as Timestamp?)?.toDate().toUtc(),
+      },
+      documentId: expectedUid,
+      allowMissingLastLoginAt: allowMissingLastLoginAt,
+    );
+    if (expectedEmail != null && profile.email != expectedEmail) {
       throw const FormatException('User profile email does not match.');
     }
     return profile;

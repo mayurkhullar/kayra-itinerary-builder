@@ -8,6 +8,120 @@ import 'package:kayra_crm_v1/features/users/domain/kayra_user.dart';
 
 void main() {
   test(
+    'directory reads only the server and sorts active users by name or email',
+    () async {
+      Map<String, dynamic> entry(
+        String uid,
+        String? name, {
+        String status = 'active',
+      }) => {
+        ..._storedProfile(status: status),
+        'uid': uid,
+        'email': '$uid@kholidaymaps.com',
+        'displayName': name,
+      };
+      final firestore = _FakeFirestore()
+        ..directory = {
+          'inactive': entry('inactive', 'A First', status: 'inactive'),
+          'zoe': entry('zoe', 'Zoe'),
+          'fallback': entry('fallback', '  '),
+          'alice': entry('alice', ' Alice '),
+        };
+      final users = await FirestoreUserProfileRepository(
+        firestore: firestore,
+      ).listUsers();
+      expect(users.map((user) => user.uid), [
+        'alice',
+        'fallback',
+        'zoe',
+        'inactive',
+      ]);
+      expect(firestore.collectionPaths, ['users']);
+      expect(firestore.directoryReadOptions.single?.source, Source.server);
+      expect(firestore.attempts, isEmpty);
+      expect(firestore.documentPaths, isEmpty);
+    },
+  );
+
+  test(
+    'directory permits an unavailable last login without changing bootstrap validation',
+    () async {
+      for (final omit in [true, false]) {
+        final data = _storedProfile();
+        if (omit) {
+          data.remove('lastLoginAt');
+        } else {
+          data['lastLoginAt'] = null;
+        }
+        final firestore = _FakeFirestore()..directory = {'agent-1': data};
+        final users = await FirestoreUserProfileRepository(
+          firestore: firestore,
+        ).listUsers();
+        expect(users.single.lastLoginAt, isNull);
+      }
+    },
+  );
+
+  test('directory returns an empty list without inventing users', () async {
+    final firestore = _FakeFirestore();
+    expect(
+      await FirestoreUserProfileRepository(firestore: firestore).listUsers(),
+      isEmpty,
+    );
+    expect(firestore.attempts, isEmpty);
+  });
+
+  for (final invalid in [
+    {'role': 'owner'},
+    {'status': 'pending'},
+    {'uid': 'different'},
+    {'email': 'external@example.com'},
+    {'lastLoginAt': 'yesterday'},
+    {'unexpected': true},
+  ]) {
+    test('directory rejects malformed profile fields $invalid', () async {
+      final firestore = _FakeFirestore()
+        ..directory = {
+          'agent-1': {..._storedProfile(), ...invalid},
+        };
+      await expectLater(
+        FirestoreUserProfileRepository(firestore: firestore).listUsers(),
+        throwsFormatException,
+      );
+      expect(firestore.attempts, isEmpty);
+    });
+  }
+
+  test(
+    'directory propagates permission denial without cached fallback',
+    () async {
+      final error = FirebaseException(
+        plugin: 'cloud_firestore',
+        code: 'permission-denied',
+      );
+      final firestore = _FakeFirestore()..directoryError = error;
+      await expectLater(
+        FirestoreUserProfileRepository(firestore: firestore).listUsers(),
+        throwsA(same(error)),
+      );
+    },
+  );
+
+  testWidgets('directory read times out without retrying', (tester) async {
+    final pending = Completer<void>();
+    final firestore = _FakeFirestore()..directoryWait = pending.future;
+    final result = FirestoreUserProfileRepository(
+      firestore: firestore,
+    ).listUsers();
+    final assertion = expectLater(result, throwsA(isA<TimeoutException>()));
+    await tester.pump(const Duration(seconds: 30));
+    await assertion;
+    expect(firestore.directoryReadOptions, hasLength(1));
+    pending.complete();
+    await tester.pump();
+  });
+
+  test(
     'creates one agent profile with normalized identity and server dates',
     () async {
       final firestore = _FakeFirestore();
@@ -324,6 +438,10 @@ class _FakeFirestore extends Fake implements FirebaseFirestore {
   Future<void>? transactionWait;
   Future<void>? serverReadWait;
   void Function()? beforeServerRead;
+  Map<String, Map<String, dynamic>> directory = {};
+  final directoryReadOptions = <GetOptions?>[];
+  Object? directoryError;
+  Future<void>? directoryWait;
 
   @override
   CollectionReference<Map<String, dynamic>> collection(String collectionPath) {
@@ -371,6 +489,18 @@ class _FakeCollection extends Fake
 
   @override
   final _FakeFirestore firestore;
+
+  @override
+  Future<QuerySnapshot<Map<String, dynamic>>> get([GetOptions? options]) async {
+    firestore.directoryReadOptions.add(options);
+    if (firestore.directoryError != null) throw firestore.directoryError!;
+    if (firestore.directoryWait != null) await firestore.directoryWait;
+    return _FakeQuerySnapshot(
+      firestore.directory.entries
+          .map((entry) => _FakeQueryDocument(entry.key, entry.value))
+          .toList(),
+    );
+  }
 
   @override
   DocumentReference<Map<String, dynamic>> doc([String? path]) {
@@ -450,4 +580,20 @@ class _FakeSnapshot extends Fake
 
   @override
   Map<String, dynamic>? data() => _data;
+}
+
+// ignore: subtype_of_sealed_class
+class _FakeQuerySnapshot extends Fake
+    implements QuerySnapshot<Map<String, dynamic>> {
+  _FakeQuerySnapshot(this.docs);
+  @override
+  final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
+}
+
+// ignore: subtype_of_sealed_class
+class _FakeQueryDocument extends _FakeSnapshot
+    implements QueryDocumentSnapshot<Map<String, dynamic>> {
+  _FakeQueryDocument(super.id, super.data);
+  @override
+  Map<String, dynamic> data() => super.data()!;
 }

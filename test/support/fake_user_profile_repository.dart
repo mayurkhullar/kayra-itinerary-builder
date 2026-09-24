@@ -20,6 +20,14 @@ KayraUser testProfile(
 class FakeUserProfileRepository implements UserProfileRepository {
   Future<KayraUser> Function(User)? onBootstrap;
   final List<User> calls = [];
+  Future<List<KayraUser>> Function()? onListUsers;
+  int listUsersCalls = 0;
+
+  @override
+  Future<List<KayraUser>> listUsers() async {
+    listUsersCalls++;
+    return onListUsers == null ? [] : await onListUsers!();
+  }
 
   @override
   Future<KayraUser> bootstrap(User user) async {

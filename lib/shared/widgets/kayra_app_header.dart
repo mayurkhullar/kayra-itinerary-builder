@@ -5,6 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_spacing.dart';
 import 'kayra_logo.dart';
+import 'kayra_user_avatar.dart';
 
 class KayraAppHeader extends StatelessWidget {
   const KayraAppHeader({
@@ -15,6 +16,9 @@ class KayraAppHeader extends StatelessWidget {
     required this.roleLabel,
     required this.onSignOut,
     required this.onPreviewAction,
+    required this.onMyTrips,
+    this.onAdmin,
+    this.isAdminSelected = false,
     this.isSigningOut = false,
     this.maxContentWidth = AppLayout.maxContentWidth,
   });
@@ -25,6 +29,9 @@ class KayraAppHeader extends StatelessWidget {
   final String roleLabel;
   final VoidCallback onSignOut;
   final VoidCallback onPreviewAction;
+  final VoidCallback onMyTrips;
+  final VoidCallback? onAdmin;
+  final bool isAdminSelected;
   final bool isSigningOut;
   final double maxContentWidth;
 
@@ -35,10 +42,13 @@ class KayraAppHeader extends StatelessWidget {
         final isMobile = constraints.maxWidth < AppLayout.mobileBreakpoint;
         final isDesktop = constraints.maxWidth >= AppLayout.desktopBreakpoint;
         final textScale = MediaQuery.textScalerOf(context).scale(16) / 16;
+        final navigationBreakpoint = onAdmin == null
+            ? AppLayout.desktopBreakpoint
+            : AppLayout.dashboardCommandBreakpoint;
         final showNavigation =
             isDesktop &&
             textScale <= 1.25 &&
-            constraints.maxWidth >= AppLayout.desktopBreakpoint * textScale;
+            constraints.maxWidth >= navigationBreakpoint * textScale;
         final padding = isMobile ? AppSpacing.s20 : AppSpacing.s40;
 
         return DecoratedBox(
@@ -71,7 +81,12 @@ class KayraAppHeader extends StatelessWidget {
                                 ? AppSpacing.s24
                                 : AppSpacing.s48,
                           ),
-                          _NavigationPreview(onPressed: onPreviewAction),
+                          _WorkspaceNavigation(
+                            onMyTrips: onMyTrips,
+                            onReusable: onPreviewAction,
+                            onAdmin: onAdmin,
+                            isAdminSelected: isAdminSelected,
+                          ),
                         ],
                         const Spacer(),
                         const SizedBox(width: AppSpacing.s8),
@@ -94,9 +109,33 @@ class KayraAppHeader extends StatelessWidget {
                         ),
                         if (!showNavigation) ...[
                           const SizedBox(width: AppSpacing.s4),
-                          IconButton(
+                          PopupMenuButton<_WorkspaceDestination>(
                             tooltip: 'Menu',
-                            onPressed: onPreviewAction,
+                            onSelected: (destination) {
+                              switch (destination) {
+                                case _WorkspaceDestination.myTrips:
+                                  onMyTrips();
+                                case _WorkspaceDestination.reusable:
+                                  onPreviewAction();
+                                case _WorkspaceDestination.admin:
+                                  onAdmin?.call();
+                              }
+                            },
+                            itemBuilder: (context) => [
+                              const PopupMenuItem(
+                                value: _WorkspaceDestination.myTrips,
+                                child: Text('My Trips'),
+                              ),
+                              const PopupMenuItem(
+                                value: _WorkspaceDestination.reusable,
+                                child: Text('Reusable Itineraries'),
+                              ),
+                              if (onAdmin != null)
+                                const PopupMenuItem(
+                                  value: _WorkspaceDestination.admin,
+                                  child: Text('Admin'),
+                                ),
+                            ],
                             icon: const Icon(Icons.menu_rounded),
                           ),
                         ],
@@ -113,22 +152,44 @@ class KayraAppHeader extends StatelessWidget {
   }
 }
 
-class _NavigationPreview extends StatelessWidget {
-  const _NavigationPreview({required this.onPressed});
+enum _WorkspaceDestination { myTrips, reusable, admin }
 
-  final VoidCallback onPressed;
+class _WorkspaceNavigation extends StatelessWidget {
+  const _WorkspaceNavigation({
+    required this.onMyTrips,
+    required this.onReusable,
+    required this.onAdmin,
+    required this.isAdminSelected,
+  });
+
+  final VoidCallback onMyTrips;
+  final VoidCallback onReusable;
+  final VoidCallback? onAdmin;
+  final bool isAdminSelected;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        _NavigationTab(label: 'My Trips', selected: true, onPressed: onPressed),
+        _NavigationTab(
+          label: 'My Trips',
+          selected: !isAdminSelected,
+          onPressed: onMyTrips,
+        ),
         const SizedBox(width: AppSpacing.s12),
         _NavigationTab(
           label: 'Reusable Itineraries',
           selected: false,
-          onPressed: onPressed,
+          onPressed: onReusable,
         ),
+        if (onAdmin != null) ...[
+          const SizedBox(width: AppSpacing.s12),
+          _NavigationTab(
+            label: 'Admin',
+            selected: isAdminSelected,
+            onPressed: onAdmin!,
+          ),
+        ],
       ],
     );
   }
@@ -209,20 +270,6 @@ class _AccountMenu extends StatelessWidget {
     return name == null || name.isEmpty ? 'Kayra account' : name;
   }
 
-  String get _initials {
-    final name = displayName?.trim();
-    if (name == null || name.isEmpty) {
-      final address = email?.trim();
-      return address == null || address.isEmpty
-          ? 'K'
-          : address.characters.take(2).toString().toUpperCase();
-    }
-    final words = name.split(RegExp(r'\s+'));
-    return '${words.first.characters.first}'
-            '${words.length > 1 ? words.last.characters.first : ''}'
-        .toUpperCase();
-  }
-
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
@@ -286,7 +333,11 @@ class _AccountMenu extends StatelessWidget {
                   ),
                 )
               else
-                _AccountAvatar(photoURL: photoURL, initials: _initials),
+                KayraUserAvatar(
+                  photoURL: photoURL,
+                  displayName: displayName,
+                  email: email,
+                ),
               if (showName) ...[
                 const SizedBox(width: AppSpacing.s12),
                 ConstrainedBox(
@@ -310,50 +361,6 @@ class _AccountMenu extends StatelessWidget {
               ],
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AccountAvatar extends StatelessWidget {
-  const _AccountAvatar({required this.photoURL, required this.initials});
-
-  final String? photoURL;
-  final String initials;
-
-  @override
-  Widget build(BuildContext context) {
-    final fallback = ColoredBox(
-      color: AppColors.navyTint,
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.s4),
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              initials,
-              style: Theme.of(context).textTheme.labelMedium,
-            ),
-          ),
-        ),
-      ),
-    );
-    final photo = photoURL?.trim();
-
-    return ExcludeSemantics(
-      child: ClipOval(
-        child: SizedBox.square(
-          dimension: AppLayout.avatarSize,
-          child: photo == null || photo.isEmpty
-              ? fallback
-              : Image.network(
-                  photo,
-                  fit: BoxFit.cover,
-                  frameBuilder: (context, child, frame, synchronouslyLoaded) =>
-                      frame == null ? fallback : child,
-                  errorBuilder: (context, error, stackTrace) => fallback,
-                ),
         ),
       ),
     );

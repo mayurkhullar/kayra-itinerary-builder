@@ -252,7 +252,13 @@ void main() {
         profiles: profiles,
       );
       await tester.pumpAndSettle();
-      expect(find.text(role.label), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byTooltip('Account menu'),
+          matching: find.text(role.label),
+        ),
+        findsOneWidget,
+      );
     });
   }
 

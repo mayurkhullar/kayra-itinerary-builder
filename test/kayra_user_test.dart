@@ -15,7 +15,7 @@ void main() {
     expect(profile.createdAt, DateTime.utc(2026, 9, 1));
     expect(profile.lastLoginAt, DateTime.utc(2026, 9, 24));
     expect(profile.createdAt.isUtc, isTrue);
-    expect(profile.lastLoginAt.isUtc, isTrue);
+    expect(profile.lastLoginAt!.isUtc, isTrue);
   });
 
   test('retains admin and inactive values without authorizing the user', () {

@@ -25,9 +25,11 @@ final class KayraUser {
 
   /// Parses a complete profile after the data layer converts its timestamps.
   /// Unknown access values never fall back to an active or privileged user.
+  /// Only directory reads opt into missing login metadata; bootstrap is strict.
   factory KayraUser.fromMap(
     Map<String, Object?> data, {
     required String documentId,
+    bool allowMissingLastLoginAt = false,
   }) {
     const fields = {
       'uid',
@@ -39,7 +41,11 @@ final class KayraUser {
       'createdAt',
       'lastLoginAt',
     };
-    if (data.length != fields.length || !fields.every(data.containsKey)) {
+    final requiredFields = allowMissingLastLoginAt
+        ? fields.difference({'lastLoginAt'})
+        : fields;
+    if (!fields.containsAll(data.keys) ||
+        !requiredFields.every(data.containsKey)) {
       throw const FormatException('Incomplete or unsupported user profile.');
     }
 
@@ -68,7 +74,9 @@ final class KayraUser {
         _ => throw const FormatException('Invalid profile status.'),
       },
       createdAt: _dateTime(data['createdAt']),
-      lastLoginAt: _dateTime(data['lastLoginAt']),
+      lastLoginAt: allowMissingLastLoginAt && data['lastLoginAt'] == null
+          ? null
+          : _dateTime(data['lastLoginAt']),
     );
   }
 
@@ -79,9 +87,15 @@ final class KayraUser {
   final KayraUserRole role;
   final KayraUserStatus status;
   final DateTime createdAt;
-  final DateTime lastLoginAt;
+  final DateTime? lastLoginAt;
 
   bool get isActive => status == KayraUserStatus.active;
+  bool get isActiveAdmin => isActive && role == KayraUserRole.admin;
+
+  String get displayLabel {
+    final name = displayName?.trim();
+    return name == null || name.isEmpty ? email : name;
+  }
 
   static bool isValidUid(String uid) =>
       uid.isNotEmpty &&
