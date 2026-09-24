@@ -14,6 +14,14 @@ service cloud.firestore {
       return isCompanyUser() && request.auth.uid == uid;
     }
 
+    function isActiveAdmin() {
+      // Authorize against the stored profile, never the proposed write or UI.
+      return isCompanyUser()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active';
+    }
+
     function validProfile(data, uid) {
       let fields = [
         'uid', 'email', 'displayName', 'photoUrl',
@@ -24,7 +32,8 @@ service cloud.firestore {
         && data.uid is string
         && data.uid == uid
         && data.email is string
-        && data.email == request.auth.token.email.trim().lower()
+        && data.email == data.email.trim().lower()
+        && data.email.matches('[^@]+@kholidaymaps[.]com')
         && (data.displayName == null || data.displayName is string)
         && (data.photoUrl == null || data.photoUrl is string)
         && data.role in ['agent', 'admin']
@@ -33,24 +42,37 @@ service cloud.firestore {
         && data.lastLoginAt is timestamp;
     }
 
+    function canUpdateOwnProfile(uid) {
+      return ownsProfile(uid)
+        && resource.data.status == 'active'
+        && request.resource.data.email == request.auth.token.email.trim().lower()
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['displayName', 'photoUrl', 'lastLoginAt'])
+        && request.resource.data.lastLoginAt == request.time;
+    }
+
+    function canAdministerProfile() {
+      // Identity and login metadata stay immutable through this permission.
+      return isActiveAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['role', 'status']);
+    }
+
     match /users/{uid} {
       // Inactive users can resolve their own status, but cannot edit it.
-      allow get: if ownsProfile(uid);
-      allow list: if false;
+      allow get: if ownsProfile(uid) || isActiveAdmin();
+      allow list: if isActiveAdmin();
 
       allow create: if ownsProfile(uid)
         && validProfile(request.resource.data, uid)
+        && request.resource.data.email == request.auth.token.email.trim().lower()
         && request.resource.data.role == 'agent'
         && request.resource.data.status == 'active'
         && request.resource.data.createdAt == request.time
         && request.resource.data.lastLoginAt == request.time;
 
-      allow update: if ownsProfile(uid)
-        && resource.data.status == 'active'
-        && validProfile(request.resource.data, uid)
-        && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['displayName', 'photoUrl', 'lastLoginAt'])
-        && request.resource.data.lastLoginAt == request.time;
+      allow update: if validProfile(request.resource.data, uid)
+        && (canUpdateOwnProfile(uid) || canAdministerProfile());
 
       allow delete: if false;
     }
