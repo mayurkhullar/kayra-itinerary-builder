@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "121704138111",
+    "project_id": "kayra-crm-v1",
+    "storage_bucket": "kayra-crm-v1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:121704138111:android:6a25d36250de8c2aad064a",
+        "android_client_info": {
+          "package_name": "com.kholidaymaps.kayracrm"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA3h_FriYmZJqieMdyFtSon3s8Eut-Aus0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
