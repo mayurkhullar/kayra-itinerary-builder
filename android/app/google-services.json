@@ -12,7 +12,12 @@
           "package_name": "com.kholidaymaps.kayracrm"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "121704138111-k0490rn9dlltk102733kodvfu841g2q4.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyA3h_FriYmZJqieMdyFtSon3s8Eut-Aus0"
@@ -20,7 +25,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "121704138111-k0490rn9dlltk102733kodvfu841g2q4.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
