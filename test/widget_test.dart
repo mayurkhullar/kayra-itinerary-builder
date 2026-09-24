@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kayra_crm_v1/app/app.dart';
 
+import 'support/fake_auth_service.dart';
+
 void main() {
   const widths = <double>[375, 390, 430, 768, 1024, 1280, 1440, 1920];
 
@@ -14,7 +16,9 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
-      await tester.pumpWidget(const KayraApp());
+      final auth = FakeAuthService(user: TestUser());
+      addTearDown(auth.dispose);
+      await tester.pumpWidget(KayraApp(authService: auth));
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
@@ -65,7 +69,10 @@ void main() {
   testWidgets('Preview controls provide feedback without feature navigation', (
     tester,
   ) async {
-    await tester.pumpWidget(const KayraApp());
+    final auth = FakeAuthService(user: TestUser());
+    addTearDown(auth.dispose);
+    await tester.pumpWidget(KayraApp(authService: auth));
+    await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'Sample text');
     expect(find.text('Sample text'), findsOneWidget);
 
@@ -87,7 +94,9 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
 
-    await tester.pumpWidget(const KayraApp());
+    final auth = FakeAuthService(user: TestUser());
+    addTearDown(auth.dispose);
+    await tester.pumpWidget(KayraApp(authService: auth));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     await tester.ensureVisible(find.text('Browse Reusable Itineraries'));
