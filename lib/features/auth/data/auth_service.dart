@@ -14,8 +14,7 @@ abstract class AuthService {
   static bool hasCompanyEmail(User user) {
     final email = user.email?.trim().toLowerCase();
     const suffix = '@kholidaymaps.com';
-    // This gate is for UI access. Server-side authorization will be enforced
-    // with Firestore Security Rules when Firestore is introduced.
+    // This check gates UI access; Firestore rules enforce data permissions.
     return email != null &&
         email.length > suffix.length &&
         email.endsWith(suffix);

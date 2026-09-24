@@ -5,6 +5,7 @@ import 'package:kayra_crm_v1/features/auth/data/auth_service.dart';
 
 class TestUser implements User {
   TestUser({
+    this.uid = 'test-user',
     this.email = 'maya@kholidaymaps.com',
     this.displayName = 'Maya Kapoor',
     this.photoURL,
@@ -17,7 +18,7 @@ class TestUser implements User {
   @override
   final String? photoURL;
   @override
-  String get uid => 'test-user';
+  final String uid;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);

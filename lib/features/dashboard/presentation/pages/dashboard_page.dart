@@ -1,7 +1,7 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../shared/widgets/kayra_app_header.dart';
+import '../../../users/domain/kayra_user.dart';
 import '../widgets/workspace_intro.dart';
 import '../widgets/workspace_preview.dart';
 
@@ -14,7 +14,7 @@ class DashboardPage extends StatelessWidget {
     this.isSigningOut = false,
   });
 
-  final User user;
+  final KayraUser user;
   final VoidCallback onSignOut;
   final bool isSigningOut;
 
@@ -35,7 +35,8 @@ class DashboardPage extends StatelessWidget {
             KayraAppHeader(
               displayName: user.displayName,
               email: user.email,
-              photoURL: user.photoURL,
+              photoURL: user.photoUrl,
+              roleLabel: user.role.label,
               onSignOut: onSignOut,
               isSigningOut: isSigningOut,
               onPreviewAction: () => _showPreviewMessage(context),

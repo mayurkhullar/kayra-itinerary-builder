@@ -1,0 +1,62 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isCompanyUser() {
+      return request.auth != null
+        && 'email' in request.auth.token
+        && request.auth.token.email is string
+        && request.auth.token.email.trim().lower()
+          .matches('[^@]+@kholidaymaps[.]com');
+    }
+
+    function ownsProfile(uid) {
+      return isCompanyUser() && request.auth.uid == uid;
+    }
+
+    function validProfile(data, uid) {
+      let fields = [
+        'uid', 'email', 'displayName', 'photoUrl',
+        'role', 'status', 'createdAt', 'lastLoginAt'
+      ];
+      return data.keys().hasAll(fields)
+        && data.keys().hasOnly(fields)
+        && data.uid is string
+        && data.uid == uid
+        && data.email is string
+        && data.email == request.auth.token.email.trim().lower()
+        && (data.displayName == null || data.displayName is string)
+        && (data.photoUrl == null || data.photoUrl is string)
+        && data.role in ['agent', 'admin']
+        && data.status in ['active', 'inactive']
+        && data.createdAt is timestamp
+        && data.lastLoginAt is timestamp;
+    }
+
+    match /users/{uid} {
+      // Inactive users can resolve their own status, but cannot edit it.
+      allow get: if ownsProfile(uid);
+      allow list: if false;
+
+      allow create: if ownsProfile(uid)
+        && validProfile(request.resource.data, uid)
+        && request.resource.data.role == 'agent'
+        && request.resource.data.status == 'active'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.lastLoginAt == request.time;
+
+      allow update: if ownsProfile(uid)
+        && resource.data.status == 'active'
+        && validProfile(request.resource.data, uid)
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['displayName', 'photoUrl', 'lastLoginAt'])
+        && request.resource.data.lastLoginAt == request.time;
+
+      allow delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

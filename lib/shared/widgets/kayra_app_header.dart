@@ -12,6 +12,7 @@ class KayraAppHeader extends StatelessWidget {
     required this.displayName,
     required this.email,
     required this.photoURL,
+    required this.roleLabel,
     required this.onSignOut,
     required this.onPreviewAction,
     this.isSigningOut = false,
@@ -20,6 +21,7 @@ class KayraAppHeader extends StatelessWidget {
   final String? displayName;
   final String? email;
   final String? photoURL;
+  final String roleLabel;
   final VoidCallback onSignOut;
   final VoidCallback onPreviewAction;
   final bool isSigningOut;
@@ -85,6 +87,7 @@ class KayraAppHeader extends StatelessWidget {
                           displayName: displayName,
                           email: email,
                           photoURL: photoURL,
+                          roleLabel: roleLabel,
                           showName: isDesktop,
                           isSigningOut: isSigningOut,
                           onSignOut: onSignOut,
@@ -187,6 +190,7 @@ class _AccountMenu extends StatelessWidget {
     required this.displayName,
     required this.email,
     required this.photoURL,
+    required this.roleLabel,
     required this.showName,
     required this.isSigningOut,
     required this.onSignOut,
@@ -195,6 +199,7 @@ class _AccountMenu extends StatelessWidget {
   final String? displayName;
   final String? email;
   final String? photoURL;
+  final String roleLabel;
   final bool showName;
   final bool isSigningOut;
   final VoidCallback onSignOut;
@@ -296,7 +301,7 @@ class _AccountMenu extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: textTheme.labelLarge,
                       ),
-                      Text('Agent', style: textTheme.bodySmall),
+                      Text(roleLabel, style: textTheme.bodySmall),
                     ],
                   ),
                 ),

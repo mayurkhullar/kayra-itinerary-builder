@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kayra_crm_v1/app/app.dart';
 
 import 'support/fake_auth_service.dart';
+import 'support/fake_user_profile_repository.dart';
 
 void main() {
   const widths = <double>[375, 390, 430, 768, 1024, 1280, 1440, 1920];
@@ -18,7 +19,12 @@ void main() {
 
       final auth = FakeAuthService(user: TestUser());
       addTearDown(auth.dispose);
-      await tester.pumpWidget(KayraApp(authService: auth));
+      await tester.pumpWidget(
+        KayraApp(
+          authService: auth,
+          userProfileRepository: FakeUserProfileRepository(),
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
@@ -71,7 +77,12 @@ void main() {
   ) async {
     final auth = FakeAuthService(user: TestUser());
     addTearDown(auth.dispose);
-    await tester.pumpWidget(KayraApp(authService: auth));
+    await tester.pumpWidget(
+      KayraApp(
+        authService: auth,
+        userProfileRepository: FakeUserProfileRepository(),
+      ),
+    );
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'Sample text');
     expect(find.text('Sample text'), findsOneWidget);
@@ -96,7 +107,12 @@ void main() {
 
     final auth = FakeAuthService(user: TestUser());
     addTearDown(auth.dispose);
-    await tester.pumpWidget(KayraApp(authService: auth));
+    await tester.pumpWidget(
+      KayraApp(
+        authService: auth,
+        userProfileRepository: FakeUserProfileRepository(),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     await tester.ensureVisible(find.text('Browse Reusable Itineraries'));

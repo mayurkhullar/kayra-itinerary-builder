@@ -3,16 +3,18 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../../core/theme/app_colors.dart';
-import '../../shared/widgets/kayra_logo.dart';
 import '../dashboard/presentation/pages/dashboard_page.dart';
+import '../users/data/user_profile_repository.dart';
+import '../users/domain/kayra_user.dart';
 import 'data/auth_service.dart';
+import 'presentation/pages/session_status_page.dart';
 import 'presentation/pages/sign_in_page.dart';
 
 class AuthGate extends StatefulWidget {
-  const AuthGate({super.key, this.authService});
+  const AuthGate({super.key, this.authService, this.userProfileRepository});
 
   final AuthService? authService;
+  final UserProfileRepository? userProfileRepository;
 
   @override
   State<AuthGate> createState() => _AuthGateState();
@@ -20,8 +22,13 @@ class AuthGate extends StatefulWidget {
 
 class _AuthGateState extends State<AuthGate> {
   late final AuthService _auth;
+  late final UserProfileRepository _profiles;
   late final StreamSubscription<User?> _subscription;
   User? _user;
+  KayraUser? _profile;
+  int _profileRequest = 0;
+  bool _isLoadingProfile = false;
+  bool _profileFailed = false;
   bool _isLoading = true;
   bool _isSigningIn = false;
   bool _isSigningOut = false;
@@ -32,6 +39,8 @@ class _AuthGateState extends State<AuthGate> {
   void initState() {
     super.initState();
     _auth = widget.authService ?? FirebaseAuthService();
+    _profiles =
+        widget.userProfileRepository ?? FirestoreUserProfileRepository();
     _subscription = _auth.authStateChanges().listen(
       _onAuthStateChanged,
       onError: (Object _) {
@@ -39,6 +48,7 @@ class _AuthGateState extends State<AuthGate> {
         setState(() {
           _isLoading = false;
           _user = null;
+          _clearProfile();
           _errorMessage =
               'We couldn’t check your session. Please sign in again.';
         });
@@ -49,10 +59,14 @@ class _AuthGateState extends State<AuthGate> {
   void _onAuthStateChanged(User? user) {
     if (!mounted) return;
     final isRejected = user != null && !AuthService.hasCompanyEmail(user);
+    final isSameSession =
+        user != null &&
+        _user?.uid == user.uid &&
+        _user?.email?.trim().toLowerCase() == user.email?.trim().toLowerCase();
     setState(() {
       _isLoading = false;
-      // Never render the workspace for an unvalidated, restored session.
       _user = isRejected ? null : user;
+      if (!isSameSession || isRejected) _clearProfile();
       if (isRejected) {
         _errorMessage = AuthService.domainError;
       } else if (user != null) {
@@ -60,7 +74,51 @@ class _AuthGateState extends State<AuthGate> {
       }
     });
     if (isRejected) unawaited(_rejectUser());
+    if (user != null && !isRejected && !isSameSession) {
+      unawaited(_loadProfile(user));
+    }
   }
+
+  void _clearProfile() {
+    _profileRequest++;
+    _profile = null;
+    _isLoadingProfile = false;
+    _profileFailed = false;
+  }
+
+  Future<void> _loadProfile(User user) async {
+    if (!mounted || !_isCurrentUser(user)) return;
+    final request = ++_profileRequest;
+    setState(() {
+      _profile = null;
+      _isLoadingProfile = true;
+      _profileFailed = false;
+    });
+    try {
+      final profile = await _profiles.bootstrap(user);
+      // A previous session or retry must never open the current workspace.
+      if (!mounted || request != _profileRequest || !_isCurrentUser(user)) {
+        return;
+      }
+      if (profile.uid != user.uid ||
+          profile.email != user.email?.trim().toLowerCase()) {
+        throw const FormatException('Profile identity mismatch');
+      }
+      setState(() => _profile = profile);
+    } catch (_) {
+      if (mounted && request == _profileRequest) {
+        setState(() => _profileFailed = true);
+      }
+    } finally {
+      if (mounted && request == _profileRequest) {
+        setState(() => _isLoadingProfile = false);
+      }
+    }
+  }
+
+  bool _isCurrentUser(User user) =>
+      _user?.uid == user.uid &&
+      _user?.email?.trim().toLowerCase() == user.email?.trim().toLowerCase();
 
   Future<void> _rejectUser() async {
     if (_isRejectingUser) return;
@@ -121,12 +179,31 @@ class _AuthGateState extends State<AuthGate> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) return const _SessionLoadingPage();
+    if (_isLoading) return const SessionStatusPage();
 
     final user = _user;
     if (user != null && !_isSigningIn && !_isRejectingUser) {
+      if (_isLoadingProfile) return const SessionStatusPage();
+      if (_profileFailed) {
+        return SessionStatusPage(
+          message: 'We couldn’t load your Kayra profile. Please try again.',
+          onRetry: _isSigningOut ? null : () => _loadProfile(user),
+          onSignOut: _signOut,
+          isSigningOut: _isSigningOut,
+        );
+      }
+      final profile = _profile;
+      if (profile == null) return const SessionStatusPage();
+      if (!profile.isActive) {
+        return SessionStatusPage(
+          message:
+              'Your Kayra account is inactive. Please contact your administrator.',
+          onSignOut: _signOut,
+          isSigningOut: _isSigningOut,
+        );
+      }
       return DashboardPage(
-        user: user,
+        user: profile,
         onSignOut: _signOut,
         isSigningOut: _isSigningOut,
       );
@@ -136,35 +213,6 @@ class _AuthGateState extends State<AuthGate> {
       onSignIn: _signIn,
       isSigningIn: _isSigningIn || _isRejectingUser,
       errorMessage: _errorMessage,
-    );
-  }
-}
-
-class _SessionLoadingPage extends StatelessWidget {
-  const _SessionLoadingPage();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      backgroundColor: AppColors.white,
-      body: SafeArea(
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              KayraLogo(),
-              SizedBox(height: 32),
-              SizedBox.square(
-                dimension: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  semanticsLabel: 'Opening your Kayra workspace',
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
