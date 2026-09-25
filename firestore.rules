@@ -209,6 +209,50 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    function validSupplier(data) {
+      let fields = [
+        'name', 'contacts', 'destinationCoverage', 'serviceCategories',
+        'status', 'createdByUid', 'createdAt', 'updatedAt'
+      ];
+      return data.keys().hasAll(fields)
+        && data.keys().hasOnly(fields)
+        && data.name is string && data.name.trim().size() > 0
+        // Detailed contact validation stays in the shared domain validators.
+        && data.contacts is list
+        && data.destinationCoverage is list
+        && data.serviceCategories is list
+        && data.serviceCategories.hasOnly([
+          'dmc', 'hotels', 'transfers', 'activities', 'visa', 'flights', 'other'
+        ])
+        && data.status in ['active', 'inactive']
+        && data.createdByUid is string && data.createdByUid.trim().size() > 0
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    match /suppliers/{supplierId} {
+      // Company-wide master: creator is audit metadata, never ownership.
+      allow get, list: if isActiveAgent() || isActiveAdmin();
+
+      allow create: if (isActiveAgent() || isActiveAdmin())
+        && validSupplier(request.resource.data)
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.status == 'active'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      // Neither role can change status or creation metadata through this rule.
+      allow update: if (isActiveAgent() || isActiveAdmin())
+        && validSupplier(request.resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'name', 'contacts', 'destinationCoverage', 'serviceCategories',
+          'updatedAt'
+        ])
+        && request.resource.data.updatedAt == request.time;
+
+      allow delete: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
