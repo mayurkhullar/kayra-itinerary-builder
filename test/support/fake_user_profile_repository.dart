@@ -22,6 +22,18 @@ class FakeUserProfileRepository implements UserProfileRepository {
   final List<User> calls = [];
   Future<List<KayraUser>> Function()? onListUsers;
   int listUsersCalls = 0;
+  Future<void> Function(String userId, KayraUserRole role)? onUpdateUserRole;
+  final roleUpdates = <({String userId, KayraUserRole role})>[];
+
+  @override
+  Future<void> updateUserRole({
+    required KayraUser currentUser,
+    required String userId,
+    required KayraUserRole role,
+  }) async {
+    roleUpdates.add((userId: userId, role: role));
+    await onUpdateUserRole?.call(userId, role);
+  }
 
   @override
   Future<List<KayraUser>> listUsers() async {

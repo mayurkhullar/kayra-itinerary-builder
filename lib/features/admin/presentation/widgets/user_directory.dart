@@ -33,21 +33,27 @@ class UserDirectory extends StatelessWidget {
     super.key,
     required this.users,
     required this.currentUserId,
+    required this.onChangeRole,
   });
 
   final List<KayraUser> users;
   final String currentUserId;
+  final ValueChanged<KayraUser> onChangeRole;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Use structured rows until all five columns have comfortable space.
+        // Use structured rows until the columns have comfortable space.
         final table =
             constraints.maxWidth >= 1100 &&
             MediaQuery.textScalerOf(context).scale(16) <= 20;
         if (table) {
-          return _UserTable(users: users, currentUserId: currentUserId);
+          return _UserTable(
+            users: users,
+            currentUserId: currentUserId,
+            onChangeRole: onChangeRole,
+          );
         }
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -57,6 +63,7 @@ class UserDirectory extends StatelessWidget {
               _UserListRow(
                 user: users[index],
                 isCurrentUser: users[index].uid == currentUserId,
+                onChangeRole: onChangeRole,
               ),
             ],
           ],
@@ -67,10 +74,15 @@ class UserDirectory extends StatelessWidget {
 }
 
 class _UserTable extends StatelessWidget {
-  const _UserTable({required this.users, required this.currentUserId});
+  const _UserTable({
+    required this.users,
+    required this.currentUserId,
+    required this.onChangeRole,
+  });
 
   final List<KayraUser> users;
   final String currentUserId;
+  final ValueChanged<KayraUser> onChangeRole;
 
   @override
   Widget build(BuildContext context) {
@@ -93,6 +105,7 @@ class _UserTable extends StatelessWidget {
           2: FlexColumnWidth(1.2),
           3: FlexColumnWidth(1.2),
           4: FlexColumnWidth(2.1),
+          5: FixedColumnWidth(144),
         },
         border: const TableBorder(
           horizontalInside: BorderSide(color: AppColors.border),
@@ -107,6 +120,7 @@ class _UserTable extends StatelessWidget {
                 'Role',
                 'Status',
                 'Last Login',
+                'Actions',
               ])
                 cell(
                   Semantics(
@@ -141,6 +155,14 @@ class _UserTable extends StatelessWidget {
                     style: textTheme.bodyMedium,
                   ),
                 ),
+                cell(
+                  user.uid == currentUserId
+                      ? const SizedBox.shrink()
+                      : _ChangeRoleAction(
+                          user: user,
+                          onChangeRole: onChangeRole,
+                        ),
+                ),
               ],
             ),
         ],
@@ -150,10 +172,15 @@ class _UserTable extends StatelessWidget {
 }
 
 class _UserListRow extends StatelessWidget {
-  const _UserListRow({required this.user, required this.isCurrentUser});
+  const _UserListRow({
+    required this.user,
+    required this.isCurrentUser,
+    required this.onChangeRole,
+  });
 
   final KayraUser user;
   final bool isCurrentUser;
+  final ValueChanged<KayraUser> onChangeRole;
 
   @override
   Widget build(BuildContext context) {
@@ -185,11 +212,32 @@ class _UserListRow extends StatelessWidget {
                 context,
               ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
             ),
+            if (!isCurrentUser) ...[
+              const SizedBox(height: AppSpacing.s8),
+              _ChangeRoleAction(user: user, onChangeRole: onChangeRole),
+            ],
           ],
         ),
       ),
     );
   }
+}
+
+class _ChangeRoleAction extends StatelessWidget {
+  const _ChangeRoleAction({required this.user, required this.onChangeRole});
+
+  final KayraUser user;
+  final ValueChanged<KayraUser> onChangeRole;
+
+  @override
+  Widget build(BuildContext context) => TextButton(
+    key: ValueKey('change-role-${user.uid}'),
+    style: TextButton.styleFrom(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s8),
+    ),
+    onPressed: () => onChangeRole(user),
+    child: const Text('Change role'),
+  );
 }
 
 class _UserIdentity extends StatelessWidget {

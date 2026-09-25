@@ -82,44 +82,42 @@ void main() {
   }
 
   for (final width in <double>[375, 390, 430, 768, 1024, 1280, 1440, 1920]) {
-    testWidgets(
-      'Admin navigation and read-only directory fit ${width.toInt()}px',
-      (tester) async {
-        viewport(tester, width);
-        final repository = FakeUserProfileRepository()
-          ..onListUsers = () async => [_admin, _agent, _inactive];
-        await showShell(tester, repository);
-        expect(repository.listUsersCalls, 0);
-        await openAdmin(tester, width);
-        await tester.pumpAndSettle();
-        expect(find.text('User Management'), findsOneWidget);
-        expect(find.text('Priya Shah'), findsOneWidget);
-        expect(find.text('priya@kholidaymaps.com'), findsOneWidget);
-        expect(find.text('You'), findsOneWidget);
-        expect(find.text('Active'), findsNWidgets(2));
-        expect(find.text('Inactive'), findsOneWidget);
-        expect(find.text('Agent'), findsNWidgets(2));
-        expect(repository.listUsersCalls, 1);
-        expect(
-          find.byType(Table),
-          width >= 1280 ? findsOneWidget : findsNothing,
+    testWidgets('Admin navigation and directory fit ${width.toInt()}px', (
+      tester,
+    ) async {
+      viewport(tester, width);
+      final repository = FakeUserProfileRepository()
+        ..onListUsers = () async => [_admin, _agent, _inactive];
+      await showShell(tester, repository);
+      expect(repository.listUsersCalls, 0);
+      await openAdmin(tester, width);
+      await tester.pumpAndSettle();
+      expect(find.text('User Management'), findsOneWidget);
+      expect(find.text('Priya Shah'), findsOneWidget);
+      expect(find.text('priya@kholidaymaps.com'), findsOneWidget);
+      expect(find.text('You'), findsOneWidget);
+      expect(find.text('Active'), findsNWidgets(2));
+      expect(find.text('Inactive'), findsOneWidget);
+      expect(find.text('Agent'), findsNWidgets(2));
+      expect(repository.listUsersCalls, 1);
+      expect(find.byType(Table), width >= 1280 ? findsOneWidget : findsNothing);
+      expect(find.byType(KayraAppHeader), findsOneWidget);
+      expect(find.text('Edit'), findsNothing);
+      expect(find.text('Delete'), findsNothing);
+      expect(find.text('Deactivate'), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.ensureVisible(find.text('Inactive Colleague'));
+      await tester.pumpAndSettle();
+      expect(find.text('Inactive Colleague').hitTestable(), findsOneWidget);
+      for (final element in find.byType(Text).evaluate()) {
+        final rect = tester.getRect(
+          find.byElementPredicate((candidate) => identical(candidate, element)),
         );
-        expect(find.byType(KayraAppHeader), findsOneWidget);
-        expect(find.text('Edit'), findsNothing);
-        expect(find.text('Delete'), findsNothing);
-        expect(find.text('Deactivate'), findsNothing);
-        expect(tester.takeException(), isNull);
-        await tester.ensureVisible(find.text('Inactive Colleague'));
-        await tester.pumpAndSettle();
-        expect(find.text('Inactive Colleague').hitTestable(), findsOneWidget);
-        for (final element in find.byType(Text).evaluate()) {
-          final rect = tester.getRect(find.byWidget(element.widget));
-          expect(rect.left, greaterThanOrEqualTo(0));
-          expect(rect.right, lessThanOrEqualTo(width));
-        }
-        expect(tester.takeException(), isNull);
-      },
-    );
+        expect(rect.left, greaterThanOrEqualTo(0));
+        expect(rect.right, lessThanOrEqualTo(width));
+      }
+      expect(tester.takeException(), isNull);
+    });
   }
 
   for (final width in <double>[390, 1440]) {

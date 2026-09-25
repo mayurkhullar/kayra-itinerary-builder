@@ -6,6 +6,11 @@ import '../domain/kayra_user.dart';
 abstract class UserProfileRepository {
   Future<KayraUser> bootstrap(User firebaseUser);
   Future<List<KayraUser>> listUsers();
+  Future<void> updateUserRole({
+    required KayraUser currentUser,
+    required String userId,
+    required KayraUserRole role,
+  });
 }
 
 class FirestoreUserProfileRepository implements UserProfileRepository {
@@ -13,6 +18,25 @@ class FirestoreUserProfileRepository implements UserProfileRepository {
     : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
+
+  /// Application safeguard; deployed Firestore rules authorize the caller.
+  @override
+  Future<void> updateUserRole({
+    required KayraUser currentUser,
+    required String userId,
+    required KayraUserRole role,
+  }) async {
+    if (!currentUser.isActiveAdmin || currentUser.uid == userId) {
+      throw StateError('Role changes require an Admin editing another user.');
+    }
+    if (!KayraUser.isValidUid(userId)) {
+      throw const FormatException('Invalid profile identity.');
+    }
+    // update (rather than set) preserves every other field and never creates a user.
+    await _firestore.collection('users').doc(userId).update({
+      'role': role.name,
+    });
+  }
 
   @override
   Future<KayraUser> bootstrap(User firebaseUser) =>

@@ -7,6 +7,116 @@ import 'package:kayra_crm_v1/features/users/data/user_profile_repository.dart';
 import 'package:kayra_crm_v1/features/users/domain/kayra_user.dart';
 
 void main() {
+  KayraUser actor({
+    String uid = 'admin-1',
+    KayraUserRole role = KayraUserRole.admin,
+    KayraUserStatus status = KayraUserStatus.active,
+  }) => KayraUser(
+    uid: uid,
+    email: 'admin@kholidaymaps.com',
+    role: role,
+    status: status,
+    createdAt: DateTime.utc(2026),
+    lastLoginAt: DateTime.utc(2026),
+  );
+
+  for (final role in KayraUserRole.values) {
+    test(
+      'updates only role to ${role.name} on the selected document',
+      () async {
+        final firestore = _FakeFirestore(
+          document: _storedProfile(
+            role: role == KayraUserRole.admin ? 'agent' : 'admin',
+          ),
+        );
+        final original = Map<String, dynamic>.from(firestore.document!);
+        await FirestoreUserProfileRepository(
+          firestore: firestore,
+        ).updateUserRole(currentUser: actor(), userId: 'agent-1', role: role);
+        expect(firestore.collectionPaths, ['users']);
+        expect(firestore.documentPaths, ['agent-1']);
+        expect(firestore.directUpdates, [
+          {'role': role.name},
+        ]);
+        expect(firestore.document, {...original, 'role': role.name});
+        expect(firestore.attempts, isEmpty);
+      },
+    );
+  }
+
+  for (final currentUser in [
+    actor(uid: 'agent-1'),
+    actor(role: KayraUserRole.agent),
+    actor(status: KayraUserStatus.inactive),
+  ]) {
+    test(
+      'rejects self/non-admin/inactive role change ${currentUser.uid}/${currentUser.role}/${currentUser.status}',
+      () async {
+        final firestore = _FakeFirestore();
+        await expectLater(
+          FirestoreUserProfileRepository(firestore: firestore).updateUserRole(
+            currentUser: currentUser,
+            userId: 'agent-1',
+            role: KayraUserRole.admin,
+          ),
+          throwsStateError,
+        );
+        expect(firestore.collectionPaths, isEmpty);
+        expect(firestore.directUpdates, isEmpty);
+      },
+    );
+  }
+
+  test('invalid roles cannot cross the typed repository boundary', () {
+    final firestore = _FakeFirestore();
+    final dynamic repository = FirestoreUserProfileRepository(
+      firestore: firestore,
+    );
+    for (final role in ['owner', 'admin', '', null, 1]) {
+      expect(
+        () => repository.updateUserRole(
+          currentUser: actor(),
+          userId: 'agent-1',
+          role: role,
+        ),
+        throwsA(isA<TypeError>()),
+      );
+    }
+    expect(firestore.collectionPaths, isEmpty);
+  });
+
+  test('invalid target ID is rejected without a write', () async {
+    final firestore = _FakeFirestore();
+    await expectLater(
+      FirestoreUserProfileRepository(firestore: firestore).updateUserRole(
+        currentUser: actor(),
+        userId: 'users/other',
+        role: KayraUserRole.admin,
+      ),
+      throwsFormatException,
+    );
+    expect(firestore.collectionPaths, isEmpty);
+  });
+
+  test('role write failures propagate without changing profile data', () async {
+    final firestore = _FakeFirestore(document: _storedProfile());
+    final original = Map<String, dynamic>.from(firestore.document!);
+    final failure = FirebaseException(
+      plugin: 'cloud_firestore',
+      code: 'permission-denied',
+    );
+    firestore.updateError = failure;
+    await expectLater(
+      FirestoreUserProfileRepository(firestore: firestore).updateUserRole(
+        currentUser: actor(),
+        userId: 'agent-1',
+        role: KayraUserRole.admin,
+      ),
+      throwsA(same(failure)),
+    );
+    expect(firestore.document, original);
+  });
+
   test(
     'directory reads only the server and sorts active users by name or email',
     () async {
@@ -442,6 +552,8 @@ class _FakeFirestore extends Fake implements FirebaseFirestore {
   final directoryReadOptions = <GetOptions?>[];
   Object? directoryError;
   Future<void>? directoryWait;
+  final directUpdates = <Map<Object, Object?>>[];
+  Object? updateError;
 
   @override
   CollectionReference<Map<String, dynamic>> collection(String collectionPath) {
@@ -518,6 +630,14 @@ class _FakeReference extends Fake
   final _FakeFirestore firestore;
   @override
   final String id;
+
+  @override
+  Future<void> update(Map<Object, Object?> data) async {
+    firestore.directUpdates.add(Map.of(data));
+    if (firestore.updateError != null) throw firestore.updateError!;
+    if (firestore.document == null) throw StateError('Missing document');
+    firestore.document!.addAll(Map<String, dynamic>.from(data));
+  }
 
   @override
   Future<DocumentSnapshot<Map<String, dynamic>>> get([

@@ -6,9 +6,10 @@ import '../../../../core/theme/app_spacing.dart';
 import '../../../../shared/widgets/kayra_content_frame.dart';
 import '../../../users/data/user_profile_repository.dart';
 import '../../../users/domain/kayra_user.dart';
+import '../widgets/change_role_dialog.dart';
 import '../widgets/user_directory.dart';
 
-/// Read-only content hosted inside the authenticated application shell.
+/// User administration hosted inside the authenticated application shell.
 class UserManagementPage extends StatefulWidget {
   const UserManagementPage({
     super.key,
@@ -27,6 +28,45 @@ class _UserManagementPageState extends State<UserManagementPage> {
   List<KayraUser>? _users;
   bool _failed = false;
   int _request = 0;
+  bool _roleDialogOpen = false;
+
+  Future<void> _changeRole(KayraUser user) async {
+    if (_roleDialogOpen ||
+        !widget.currentUser.isActiveAdmin ||
+        user.uid == widget.currentUser.uid) {
+      return;
+    }
+    final request = _request;
+    _roleDialogOpen = true;
+    try {
+      final updated = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => ChangeRoleDialog(
+          user: user,
+          onSave: (role) async {
+            // Recheck at submission, including dialogs opened before access changed.
+            if (!mounted ||
+                request != _request ||
+                !widget.currentUser.isActiveAdmin ||
+                user.uid == widget.currentUser.uid) {
+              throw StateError('Role change is no longer available.');
+            }
+            await widget.repository.updateUserRole(
+              currentUser: widget.currentUser,
+              userId: user.uid,
+              role: role,
+            );
+          },
+        ),
+      );
+      if (updated == true && mounted && request == _request) {
+        await _loadUsers();
+      }
+    } finally {
+      _roleDialogOpen = false;
+    }
+  }
 
   @override
   void initState() {
@@ -94,6 +134,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
       content = UserDirectory(
         users: users,
         currentUserId: widget.currentUser.uid,
+        onChangeRole: _changeRole,
       );
     }
 
