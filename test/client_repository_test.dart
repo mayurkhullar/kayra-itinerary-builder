@@ -137,13 +137,16 @@ void main() {
   });
 
   test(
-    'list returns parsed immutable clients and empty collections stay empty',
+    'Admin list returns all owners without a filter and an immutable result',
     () async {
       final firestore = _FakeFirestore();
       final repository = FirestoreClientRepository(firestore: firestore);
-      expect(await repository.listClients(), isEmpty);
-      firestore.documents.addAll({'one': _record(), 'two': _record()});
-      final clients = await repository.listClients();
+      expect(await repository.listAllClientsForAdmin(), isEmpty);
+      firestore.documents.addAll({
+        'one': _record(),
+        'two': {..._record(), 'createdByUid': 'another-agent'},
+      });
+      final clients = await repository.listAllClientsForAdmin();
       expect(clients.map((client) => client.id), ['one', 'two']);
       expect(clients.first.displayName, 'Priya Shah');
       expect(() => clients.clear(), throwsUnsupportedError);
@@ -156,8 +159,50 @@ void main() {
       expect(firestore.collections, ['clients', 'clients']);
       expect(firestore.sets, isEmpty);
       expect(firestore.updates, isEmpty);
+      expect(firestore.filters, isEmpty);
+      expect(firestore.unscopedReads, 2);
     },
   );
+
+  test(
+    'Agent list sends an owner equality query, never fetches all clients',
+    () async {
+      final firestore = _FakeFirestore()
+        ..documents.addAll({
+          'mine': _record(),
+          'other': {..._record(), 'createdByUid': 'agent-2'},
+        });
+      final clients = await FirestoreClientRepository(
+        firestore: firestore,
+      ).listOwnedClients('agent-1');
+      expect(firestore.filters, [(field: 'createdByUid', equals: 'agent-1')]);
+      expect(firestore.unscopedReads, 0);
+      expect(firestore.readOptions.single?.source, Source.server);
+      expect(clients.map((client) => client.id), ['mine']);
+      expect(() => clients.clear(), throwsUnsupportedError);
+      expect(firestore.collections, ['clients']);
+    },
+  );
+
+  test(
+    'owner-scoped empty results do not fall back to the entire collection',
+    () async {
+      final firestore = _FakeFirestore()..documents['other'] = _record();
+      final clients = await FirestoreClientRepository(
+        firestore: firestore,
+      ).listOwnedClients('agent-2');
+      expect(clients, isEmpty);
+      expect(firestore.unscopedReads, 0);
+      expect(firestore.filters, [(field: 'createdByUid', equals: 'agent-2')]);
+    },
+  );
+
+  test('client repository exposes no delete method', () {
+    final firestore = _FakeFirestore();
+    final dynamic repository = FirestoreClientRepository(firestore: firestore);
+    expect(() => repository.deleteClient('one'), throwsNoSuchMethodError);
+    expect(firestore.collections, isEmpty);
+  });
 
   for (final field in ['createdAt', 'updatedAt']) {
     for (final value in [null, '2026-09-25', DateTime.utc(2026), 123]) {
@@ -169,7 +214,10 @@ void main() {
           repository.getClientById('bad'),
           throwsFormatException,
         );
-        await expectLater(repository.listClients(), throwsFormatException);
+        await expectLater(
+          repository.listAllClientsForAdmin(),
+          throwsFormatException,
+        );
       });
     }
   }
@@ -192,7 +240,10 @@ void main() {
           repository.getClientById('bad'),
           throwsFormatException,
         );
-        await expectLater(repository.listClients(), throwsFormatException);
+        await expectLater(
+          repository.listAllClientsForAdmin(),
+          throwsFormatException,
+        );
       }
     },
   );
@@ -208,6 +259,10 @@ void main() {
           throwsFormatException,
         );
         await expectLater(repository.getClientById(id), throwsFormatException);
+        await expectLater(
+          repository.listOwnedClients(id),
+          throwsFormatException,
+        );
         await expectLater(
           repository.updateClient(clientId: id, details: details()),
           throwsFormatException,
@@ -235,8 +290,16 @@ void main() {
         repository.updateClient(clientId: 'one', details: details()),
         throwsA(same(denied)),
       );
-      await expectLater(repository.listClients(), throwsA(same(denied)));
+      await expectLater(
+        repository.listAllClientsForAdmin(),
+        throwsA(same(denied)),
+      );
+      await expectLater(
+        repository.listOwnedClients('agent-1'),
+        throwsA(same(denied)),
+      );
       expect(firestore.collections, [
+        'clients',
         'clients',
         'clients',
         'clients',
@@ -246,16 +309,16 @@ void main() {
     },
   );
 
-  for (final list in [false, true]) {
-    testWidgets('bounds stalled ${list ? 'list' : 'get'} reads', (
-      tester,
-    ) async {
+  for (final operation in ['get', 'owned list', 'Admin list']) {
+    testWidgets('bounds stalled $operation reads', (tester) async {
       final pending = Completer<void>();
       final firestore = _FakeFirestore()..readWait = pending.future;
       final repository = FirestoreClientRepository(firestore: firestore);
-      final future = list
-          ? repository.listClients()
-          : repository.getClientById('one');
+      final future = switch (operation) {
+        'get' => repository.getClientById('one'),
+        'owned list' => repository.listOwnedClients('agent-1'),
+        _ => repository.listAllClientsForAdmin(),
+      };
       final assertion = expectLater(future, throwsA(isA<TimeoutException>()));
       await tester.pump(const Duration(seconds: 30));
       await assertion;
@@ -284,6 +347,8 @@ class _FakeFirestore extends Fake implements FirebaseFirestore {
   final sets = <({String id, Map<String, dynamic> data})>[];
   final updates = <({String id, Map<String, dynamic> data})>[];
   final readOptions = <GetOptions?>[];
+  final filters = <({Object field, Object? equals})>[];
+  int unscopedReads = 0;
   Object? error;
   Future<void>? readWait;
   int _nextId = 0;
@@ -309,6 +374,25 @@ class _Collection extends Fake
   final _FakeFirestore firestore;
 
   @override
+  Query<Map<String, dynamic>> where(
+    Object field, {
+    Object? isEqualTo,
+    Object? isNotEqualTo,
+    Object? isLessThan,
+    Object? isLessThanOrEqualTo,
+    Object? isGreaterThan,
+    Object? isGreaterThanOrEqualTo,
+    Object? arrayContains,
+    Iterable<Object?>? arrayContainsAny,
+    Iterable<Object?>? whereIn,
+    Iterable<Object?>? whereNotIn,
+    bool? isNull,
+  }) {
+    firestore.filters.add((field: field, equals: isEqualTo));
+    return _OwnerQuery(firestore, field, isEqualTo);
+  }
+
+  @override
   DocumentReference<Map<String, dynamic>> doc([String? path]) {
     firestore.requestedIds.add(path);
     return _Reference(firestore, path ?? 'generated-${++firestore._nextId}');
@@ -316,9 +400,31 @@ class _Collection extends Fake
 
   @override
   Future<QuerySnapshot<Map<String, dynamic>>> get([GetOptions? options]) async {
+    firestore.unscopedReads++;
     await firestore.beforeRead(options);
     return _QuerySnapshot(
       firestore.documents.entries
+          .map((entry) => _QueryDocument(entry.key, entry.value))
+          .toList(),
+    );
+  }
+}
+
+// This fake applies the captured Firestore query before returning documents.
+// ignore: subtype_of_sealed_class
+class _OwnerQuery extends Fake implements Query<Map<String, dynamic>> {
+  _OwnerQuery(this.firestore, this.field, this.value);
+  @override
+  final _FakeFirestore firestore;
+  final Object field;
+  final Object? value;
+
+  @override
+  Future<QuerySnapshot<Map<String, dynamic>>> get([GetOptions? options]) async {
+    await firestore.beforeRead(options);
+    return _QuerySnapshot(
+      firestore.documents.entries
+          .where((entry) => entry.value[field] == value)
           .map((entry) => _QueryDocument(entry.key, entry.value))
           .toList(),
     );

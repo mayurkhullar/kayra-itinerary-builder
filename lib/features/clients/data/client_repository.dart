@@ -14,11 +14,15 @@ abstract class ClientRepository {
     required String clientId,
     required ClientDetails details,
   });
-  Future<List<KayraClient>> listClients();
+
+  /// Agents pass their authenticated UID. Firestore enforces ownership.
+  Future<List<KayraClient>> listOwnedClients(String ownerUid);
+
+  /// Firestore permits this unrestricted query only for active Admins.
+  Future<List<KayraClient>> listAllClientsForAdmin();
 }
 
-/// Foundation only: client access remains denied by current Firestore rules.
-/// Query scope must be revisited when the client visibility policy is defined.
+/// Explicit query scopes; server rules remain the authorization boundary.
 class FirestoreClientRepository implements ClientRepository {
   FirestoreClientRepository({FirebaseFirestore? firestore})
     : _firestore = firestore ?? FirebaseFirestore.instance;
@@ -70,9 +74,25 @@ class FirestoreClientRepository implements ClientRepository {
   }
 
   @override
-  Future<List<KayraClient>> listClients() async {
-    final snapshot = await _firestore
-        .collection('clients')
+  Future<List<KayraClient>> listOwnedClients(String ownerUid) async {
+    if (!KayraClient.isValidId(ownerUid)) {
+      throw const FormatException('Invalid owner UID.');
+    }
+    return _listClients(
+      _firestore
+          .collection('clients')
+          .where('createdByUid', isEqualTo: ownerUid),
+    );
+  }
+
+  @override
+  Future<List<KayraClient>> listAllClientsForAdmin() =>
+      _listClients(_firestore.collection('clients'));
+
+  Future<List<KayraClient>> _listClients(
+    Query<Map<String, dynamic>> query,
+  ) async {
+    final snapshot = await query
         .get(const GetOptions(source: Source.server))
         .timeout(const Duration(seconds: 30));
     return List.unmodifiable(snapshot.docs.map(_readClient));

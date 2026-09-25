@@ -77,6 +77,59 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    function isActiveAgent() {
+      return isCompanyUser()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'agent'
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active';
+    }
+
+    function validClient(data) {
+      let required = [
+        'firstName', 'lastName', 'mobileNumber',
+        'createdByUid', 'createdAt', 'updatedAt'
+      ];
+      let optional = ['email', 'city', 'company'];
+      return data.keys().hasAll(required)
+        && data.keys().hasOnly(required.concat(optional))
+        && data.firstName is string && data.firstName.trim().size() > 0
+        && data.lastName is string && data.lastName.trim().size() > 0
+        && data.mobileNumber is string && data.mobileNumber.trim().size() > 0
+        && data.createdByUid is string && data.createdByUid.size() > 0
+        && (data.get('email', null) == null || data.email is string)
+        && (data.get('city', null) == null || data.city is string)
+        && (data.get('company', null) == null || data.company is string)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function canAccessClient() {
+      // Agent list queries must constrain createdByUid; rules are not filters.
+      return isActiveAdmin()
+        || (isActiveAgent() && resource.data.createdByUid == request.auth.uid);
+    }
+
+    match /clients/{clientId} {
+      allow get, list: if canAccessClient();
+
+      // Admins retain Agent creation abilities, but cannot assign another owner.
+      allow create: if (isActiveAgent() || isActiveAdmin())
+        && validClient(request.resource.data)
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      allow update: if canAccessClient()
+        && validClient(request.resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'firstName', 'lastName', 'mobileNumber', 'email', 'city', 'company',
+          'updatedAt'
+        ])
+        && request.resource.data.updatedAt == request.time;
+
+      allow delete: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
