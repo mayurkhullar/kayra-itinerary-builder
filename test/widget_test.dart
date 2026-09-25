@@ -1,3 +1,5 @@
+import 'support/fake_client_repository.dart';
+import 'support/fake_trip_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kayra_crm_v1/app/app.dart';
@@ -14,7 +16,9 @@ void main() {
     addTearDown(auth.dispose);
     await tester.pumpWidget(
       KayraApp(
+        tripRepository: FakeTripRepository(),
         authService: auth,
+        clientRepository: FakeClientRepository(),
         userProfileRepository: FakeUserProfileRepository(),
       ),
     );
@@ -107,7 +111,6 @@ void main() {
     await tester.enterText(find.byType(TextField), 'Sample text');
     expect(find.text('Sample text'), findsOneWidget);
     for (final action in [
-      find.text('Create New Itinerary').first,
       find.text('Browse Reusable Itineraries'),
       find.text('Browse Library'),
     ]) {

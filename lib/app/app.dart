@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_theme.dart';
+import '../features/trips/data/trip_repository.dart';
 import '../features/auth/auth_gate.dart';
 import '../features/auth/data/auth_service.dart';
 import '../features/clients/data/client_repository.dart';
@@ -12,11 +13,13 @@ class KayraApp extends StatelessWidget {
     this.authService,
     this.userProfileRepository,
     this.clientRepository,
+    this.tripRepository,
   });
 
   final AuthService? authService;
   final UserProfileRepository? userProfileRepository;
   final ClientRepository? clientRepository;
+  final TripRepository? tripRepository;
 
   @override
   Widget build(BuildContext context) {
@@ -28,6 +31,7 @@ class KayraApp extends StatelessWidget {
         authService: authService,
         userProfileRepository: userProfileRepository,
         clientRepository: clientRepository,
+        tripRepository: tripRepository,
       ),
     );
   }

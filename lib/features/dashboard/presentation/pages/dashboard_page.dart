@@ -1,18 +1,16 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/layout/app_layout.dart';
-import '../../../../core/theme/app_spacing.dart';
+import '../../../trips/data/trip_repository.dart';
 import '../../../../shared/widgets/kayra_app_header.dart';
-import '../../../../shared/widgets/kayra_content_frame.dart';
 import '../../../clients/data/client_repository.dart';
 import '../../../clients/presentation/pages/clients_page.dart';
 import '../../../users/domain/kayra_user.dart';
 import '../../../users/data/user_profile_repository.dart';
 import '../../../admin/presentation/pages/user_management_page.dart';
-import '../widgets/dashboard_command_area.dart';
-import '../widgets/dashboard_sections.dart';
+import '../../../trips/presentation/widgets/trips_workspace.dart';
 
-/// The authenticated operational shell, ready for future trip data.
+/// The authenticated operational shell.
 class DashboardPage extends StatefulWidget {
   const DashboardPage({
     super.key,
@@ -21,6 +19,7 @@ class DashboardPage extends StatefulWidget {
     required this.userProfileRepository,
     this.isSigningOut = false,
     this.clientRepository,
+    this.tripRepository,
   });
 
   final KayraUser user;
@@ -28,6 +27,7 @@ class DashboardPage extends StatefulWidget {
   final bool isSigningOut;
   final UserProfileRepository userProfileRepository;
   final ClientRepository? clientRepository;
+  final TripRepository? tripRepository;
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
@@ -90,43 +90,13 @@ class _DashboardPageState extends State<DashboardPage> {
                     )
                   : _page == _WorkspacePage.clients
                   ? ClientsPage(currentUser: user, repository: _clients)
-                  : SingleChildScrollView(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          DashboardCommandArea(
-                            displayName: user.displayName,
-                            onCreateItinerary: () =>
-                                _showUnavailableMessage(context),
-                            onBrowseItineraries: () =>
-                                _showUnavailableMessage(context),
-                          ),
-                          KayraContentFrame(
-                            maxWidth: AppLayout.dashboardMaxContentWidth,
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                vertical: AppSpacing.s24,
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  const NeedsAttentionSection(),
-                                  const SizedBox(height: AppSpacing.s32),
-                                  MyTripsSection(
-                                    onCreateItinerary: () =>
-                                        _showUnavailableMessage(context),
-                                  ),
-                                  const SizedBox(height: AppSpacing.s16),
-                                  ReusableItinerariesPanel(
-                                    onBrowseItineraries: () =>
-                                        _showUnavailableMessage(context),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                  : TripsWorkspace(
+                      currentUser: user,
+                      tripRepository: widget.tripRepository,
+                      clientRepository: widget.clientRepository,
+                      onBrowse: () => _showUnavailableMessage(context),
+                      onClients: () =>
+                          setState(() => _page = _WorkspacePage.clients),
                     ),
             ),
           ],

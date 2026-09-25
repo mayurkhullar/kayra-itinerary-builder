@@ -1,3 +1,4 @@
+import 'support/fake_trip_repository.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -49,7 +50,11 @@ void main() {
     repository.onBootstrap = (_) async => profile;
     addTearDown(auth.dispose);
     await tester.pumpWidget(
-      KayraApp(authService: auth, userProfileRepository: repository),
+      KayraApp(
+        tripRepository: FakeTripRepository(),
+        authService: auth,
+        userProfileRepository: repository,
+      ),
     );
     await tester.pumpAndSettle();
   }

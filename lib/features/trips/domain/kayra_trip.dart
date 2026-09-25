@@ -55,6 +55,17 @@ enum TripStatus {
 }
 
 abstract final class TripValidation {
+  static List<String> destinations(List<String> values) {
+    final cleaned = values
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toList();
+    if (cleaned.isEmpty) {
+      throw const FormatException('At least one destination is required.');
+    }
+    return List.unmodifiable(cleaned);
+  }
+
   static String id(String value) {
     if (value.isEmpty ||
         value.trim() != value ||
@@ -100,11 +111,7 @@ final class TripBrief {
     required int infants,
     required this.hotelCategory,
     required this.tripType,
-  }) : destinations = List.unmodifiable(
-         destinations
-             .map((value) => value.trim())
-             .where((value) => value.isNotEmpty),
-       ),
+  }) : destinations = TripValidation.destinations(destinations),
        // Preserve the entered calendar day, not its local-time UTC conversion.
        travelStartDate = DateTime.utc(
          travelStartDate.year,
@@ -118,11 +125,7 @@ final class TripBrief {
        ),
        adults = TripValidation.count(adults, 'Adults', minimum: 1),
        children = TripValidation.count(children, 'Children'),
-       infants = TripValidation.count(infants, 'Infants') {
-    if (this.destinations.isEmpty) {
-      throw const FormatException('At least one destination is required.');
-    }
-  }
+       infants = TripValidation.count(infants, 'Infants');
 
   final List<String> destinations;
   final DateTime travelStartDate;
@@ -140,9 +143,23 @@ final class TripBrief {
   void validateClientCompany(String? company) =>
       TripValidation.clientCompany(tripType, company);
 
-  String tripNameFor(String firstName, String lastName) {
+  String tripNameFor(String firstName, String lastName) => generateName(
+    firstName: firstName,
+    lastName: lastName,
+    destinations: destinations,
+    travelStartDate: travelStartDate,
+  );
+
+  /// Shared by saved briefs and previews before the remaining controls are filled.
+  static String generateName({
+    required String firstName,
+    required String lastName,
+    required List<String> destinations,
+    required DateTime travelStartDate,
+  }) {
     final first = TripValidation.requiredText(firstName, 'Client first name');
     final last = TripValidation.requiredText(lastName, 'Client last name');
+    final places = TripValidation.destinations(destinations);
     const months = [
       'Jan',
       'Feb',
@@ -157,7 +174,7 @@ final class TripBrief {
       'Nov',
       'Dec',
     ];
-    return '$first $last – ${destinations.join(' & ')} – ${months[travelStartDate.month - 1]} ${travelStartDate.year}';
+    return '$first $last – ${places.join(' & ')} – ${months[travelStartDate.month - 1]} ${travelStartDate.year}';
   }
 
   /// The data layer converts the domain date into a Firestore Timestamp.

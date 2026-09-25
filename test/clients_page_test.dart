@@ -1,3 +1,4 @@
+import 'support/fake_trip_repository.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -99,6 +100,7 @@ void main() {
             ..onBootstrap = (_) async => user;
           await tester.pumpWidget(
             KayraApp(
+              tripRepository: FakeTripRepository(),
               authService: auth,
               userProfileRepository: profiles,
               clientRepository: repository,

@@ -62,14 +62,12 @@ class NeedsAttentionSection extends StatelessWidget {
 }
 
 class MyTripsSection extends StatelessWidget {
-  const MyTripsSection({super.key, required this.onCreateItinerary});
+  const MyTripsSection({super.key, required this.child});
 
-  final VoidCallback onCreateItinerary;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -78,35 +76,7 @@ class MyTripsSection extends StatelessWidget {
           description: 'Your upcoming and active journeys.',
         ),
         const SizedBox(height: AppSpacing.s16),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.s24,
-              vertical: AppSpacing.s24,
-            ),
-            child: Column(
-              children: [
-                Text('No trips yet', style: textTheme.titleLarge),
-                const SizedBox(height: AppSpacing.s8),
-                Text(
-                  'Create your first itinerary to start building a journey.',
-                  textAlign: TextAlign.center,
-                  style: textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.s16),
-                FilledButton(
-                  onPressed: onCreateItinerary,
-                  child: const Text(
-                    'Create New Itinerary',
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+        child,
       ],
     );
   }
