@@ -130,6 +130,85 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    function validTripIdentity(value) {
+      return value is string
+        && value.size() > 0
+        && value == value.trim()
+        && !value.matches('.*[/].*')
+        && value != '.' && value != '..';
+    }
+
+    function validTrip(data) {
+      let fields = [
+        'clientId', 'clientFirstName', 'clientLastName', 'tripName',
+        'destinations', 'travelStartDate', 'numberOfNights',
+        'adults', 'children', 'infants', 'hotelCategory', 'tripType',
+        'status', 'ownerUid', 'createdByUid', 'createdAt', 'updatedAt'
+      ];
+      return data.keys().hasAll(fields)
+        && data.keys().hasOnly(fields)
+        && validTripIdentity(data.clientId)
+        && validTripIdentity(data.ownerUid)
+        && validTripIdentity(data.createdByUid)
+        && data.clientFirstName is string && data.clientFirstName.trim().size() > 0
+        && data.clientLastName is string && data.clientLastName.trim().size() > 0
+        && data.tripName is string && data.tripName.trim().size() > 0
+        && data.destinations is list && data.destinations.size() > 0
+        && data.travelStartDate is timestamp
+        && data.numberOfNights is int && data.numberOfNights >= 1
+        && data.adults is int && data.adults >= 1
+        && data.children is int && data.children >= 0
+        && data.infants is int && data.infants >= 0
+        && data.hotelCategory in ['3_star', '4_star', '5_star', 'luxury']
+        && data.tripType in ['fit', 'business', 'corporate', 'groups']
+        && data.status in [
+          'draft', 'quote_prepared', 'sent_to_client', 'under_discussion',
+          'revised', 'client_approved', 'on_hold', 'confirmed',
+          'cancelled', 'lost', 'travel_completed'
+        ]
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function canCreateTripForClient(clientId) {
+      let clientPath = /databases/$(database)/documents/clients/$(clientId);
+      return exists(clientPath)
+        && (isActiveAdmin()
+          || get(clientPath).data.createdByUid == request.auth.uid);
+    }
+
+    function canAccessTrip() {
+      // Agent queries must constrain current ownerUid, not original creator.
+      return isActiveAdmin()
+        || (isActiveAgent() && resource.data.ownerUid == request.auth.uid);
+    }
+
+    match /trips/{tripId} {
+      allow get, list: if canAccessTrip();
+
+      allow create: if (isActiveAgent() || isActiveAdmin())
+        && validTrip(request.resource.data)
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.status == 'draft'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && canCreateTripForClient(request.resource.data.clientId);
+
+      // Same brief-only update boundary for Agents and Admins. The Client link
+      // and creation-time name snapshot stay fixed, matching TripRepository.
+      // Ownership, creator, creation time and status are not editable here.
+      allow update: if canAccessTrip()
+        && validTrip(request.resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'tripName', 'destinations', 'travelStartDate', 'numberOfNights',
+          'adults', 'children', 'infants', 'hotelCategory', 'tripType', 'updatedAt'
+        ])
+        && request.resource.data.updatedAt == request.time;
+
+      allow delete: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

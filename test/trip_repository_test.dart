@@ -86,6 +86,13 @@ void main() {
       expect(firestore.readOptions, isEmpty);
     },
   );
+  test('Trip repository exposes no delete method', () {
+    final dynamic tripRepository = repository;
+    expect(() => tripRepository.deleteTrip('trip-1'), throwsNoSuchMethodError);
+    expect(firestore.collections, isEmpty);
+    expect(clients.reads, isEmpty);
+  });
+
   test('identical briefs receive distinct Firestore IDs', () async {
     final first = await repository.createTrip(
       clientId: 'client-1',
