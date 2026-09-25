@@ -253,6 +253,117 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    function canAccessTripSources(tripId) {
+      let tripPath = /databases/$(database)/documents/trips/$(tripId);
+      // Resolve the current parent owner, never the source's original uploader.
+      // Even Admins need an existing parent Trip.
+      return (isActiveAgent() || isActiveAdmin())
+        && exists(tripPath)
+        && (isActiveAdmin() || get(tripPath).data.ownerUid == request.auth.uid);
+    }
+
+    function validSourceSupplierLink(data) {
+      return (data.supplierId == null && data.supplierNameSnapshot == null)
+        || (validTripIdentity(data.supplierId)
+          && data.supplierNameSnapshot is string
+          && data.supplierNameSnapshot.trim().size() > 0
+          && exists(/databases/$(database)/documents/suppliers/$(data.supplierId)));
+    }
+
+    function validSourcePackage(data, tripId) {
+      let fields = [
+        'tripId', 'supplierId', 'supplierNameSnapshot', 'fileIds',
+        'uploadedByUid', 'createdAt', 'updatedAt', 'status'
+      ];
+      return data.keys().hasAll(fields)
+        && data.keys().hasOnly(fields)
+        && data.tripId == tripId
+        && validTripIdentity(data.uploadedByUid)
+        && validSourceSupplierLink(data)
+        && data.fileIds is list
+        && data.fileIds.toSet().size() == data.fileIds.size()
+        && data.status in ['uploading', 'uploaded', 'failed']
+        && (data.status != 'uploaded' || data.fileIds.size() > 0)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    match /trips/{tripId}/supplier_source_packages/{packageId} {
+      allow get, list: if canAccessTripSources(tripId);
+
+      allow create: if canAccessTripSources(tripId)
+        && validSourcePackage(request.resource.data, tripId)
+        && request.resource.data.uploadedByUid == request.auth.uid
+        && request.resource.data.status == 'uploading'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      allow update: if canAccessTripSources(tripId)
+        && validSourcePackage(request.resource.data, tripId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'supplierId', 'supplierNameSnapshot', 'fileIds', 'status', 'updatedAt'
+        ])
+        && request.resource.data.updatedAt == request.time;
+
+      allow delete: if false;
+    }
+
+    function validSourceStoragePath(storagePath, tripId, fileId) {
+      let parts = storagePath.split('/');
+      // Compare literal segments so IDs never become regular expressions.
+      return parts.size() == 5
+        && parts[0] == 'trips'
+        && parts[1] == tripId
+        && parts[2] == 'supplier_sources'
+        && parts[3] == fileId
+        && validTripIdentity(parts[4]);
+    }
+
+    function validSourceFile(data, tripId, fileId) {
+      let fields = [
+        'tripId', 'packageId', 'originalFileName', 'storagePath',
+        'contentType', 'sizeBytes', 'uploadedByUid', 'createdAt'
+      ];
+      return data.keys().hasAll(fields)
+        && data.keys().hasOnly(fields)
+        && data.tripId == tripId
+        && validTripIdentity(data.packageId)
+        && exists(/databases/$(database)/documents/trips/$(tripId)/supplier_source_packages/$(data.packageId))
+        && data.originalFileName is string
+        && data.originalFileName.trim().size() > 0
+        && data.storagePath is string
+        && validSourceStoragePath(data.storagePath, tripId, fileId)
+        && data.sizeBytes is int
+        && data.sizeBytes > 0
+        && data.sizeBytes <= 25 * 1024 * 1024
+        && data.contentType in [
+          'application/pdf',
+          'application/msword',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'application/vnd.ms-excel',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'text/csv',
+          'text/plain',
+          'image/jpeg',
+          'image/png',
+          'image/webp'
+        ]
+        && validTripIdentity(data.uploadedByUid)
+        && data.createdAt is timestamp;
+    }
+
+    match /trips/{tripId}/supplier_source_files/{fileId} {
+      allow get, list: if canAccessTripSources(tripId);
+
+      allow create: if canAccessTripSources(tripId)
+        && validSourceFile(request.resource.data, tripId, fileId)
+        && request.resource.data.uploadedByUid == request.auth.uid
+        && request.resource.data.createdAt == request.time;
+
+      // Original source metadata is immutable, including for Admins.
+      allow update, delete: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
