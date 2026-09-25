@@ -19,6 +19,8 @@ class KayraAppHeader extends StatelessWidget {
     required this.onMyTrips,
     required this.onClients,
     this.isClientsSelected = false,
+    this.onSuppliers,
+    this.isSuppliersSelected = false,
     this.onAdmin,
     this.isAdminSelected = false,
     this.isSigningOut = false,
@@ -34,6 +36,8 @@ class KayraAppHeader extends StatelessWidget {
   final VoidCallback onMyTrips;
   final VoidCallback onClients;
   final bool isClientsSelected;
+  final VoidCallback? onSuppliers;
+  final bool isSuppliersSelected;
   final VoidCallback? onAdmin;
   final bool isAdminSelected;
   final bool isSigningOut;
@@ -79,7 +83,9 @@ class KayraAppHeader extends StatelessWidget {
                         if (showNavigation) ...[
                           SizedBox(
                             width:
-                                constraints.maxWidth < AppLayout.maxContentWidth
+                                onSuppliers != null ||
+                                    constraints.maxWidth <
+                                        AppLayout.maxContentWidth
                                 ? AppSpacing.s24
                                 : AppSpacing.s48,
                           ),
@@ -87,6 +93,8 @@ class KayraAppHeader extends StatelessWidget {
                             onMyTrips: onMyTrips,
                             onClients: onClients,
                             isClientsSelected: isClientsSelected,
+                            onSuppliers: onSuppliers,
+                            isSuppliersSelected: isSuppliersSelected,
                             onReusable: onPreviewAction,
                             onAdmin: onAdmin,
                             isAdminSelected: isAdminSelected,
@@ -107,7 +115,12 @@ class KayraAppHeader extends StatelessWidget {
                           email: email,
                           photoURL: photoURL,
                           roleLabel: roleLabel,
-                          showName: isDesktop,
+                          showName:
+                              isDesktop &&
+                              (onSuppliers == null ||
+                                  !showNavigation ||
+                                  (constraints.maxWidth >= 1440 &&
+                                      textScale <= 1)),
                           isSigningOut: isSigningOut,
                           onSignOut: onSignOut,
                         ),
@@ -121,6 +134,8 @@ class KayraAppHeader extends StatelessWidget {
                                   onMyTrips();
                                 case _WorkspaceDestination.clients:
                                   onClients();
+                                case _WorkspaceDestination.suppliers:
+                                  onSuppliers?.call();
                                 case _WorkspaceDestination.reusable:
                                   onPreviewAction();
                                 case _WorkspaceDestination.admin:
@@ -136,6 +151,11 @@ class KayraAppHeader extends StatelessWidget {
                                 value: _WorkspaceDestination.clients,
                                 child: Text('Clients'),
                               ),
+                              if (onSuppliers != null)
+                                const PopupMenuItem(
+                                  value: _WorkspaceDestination.suppliers,
+                                  child: Text('Suppliers'),
+                                ),
                               const PopupMenuItem(
                                 value: _WorkspaceDestination.reusable,
                                 child: Text('Reusable Itineraries'),
@@ -162,7 +182,7 @@ class KayraAppHeader extends StatelessWidget {
   }
 }
 
-enum _WorkspaceDestination { myTrips, clients, reusable, admin }
+enum _WorkspaceDestination { myTrips, clients, suppliers, reusable, admin }
 
 class _WorkspaceNavigation extends StatelessWidget {
   const _WorkspaceNavigation({
@@ -170,6 +190,8 @@ class _WorkspaceNavigation extends StatelessWidget {
     required this.onReusable,
     required this.onClients,
     required this.isClientsSelected,
+    required this.onSuppliers,
+    required this.isSuppliersSelected,
     required this.onAdmin,
     required this.isAdminSelected,
   });
@@ -178,6 +200,8 @@ class _WorkspaceNavigation extends StatelessWidget {
   final VoidCallback onReusable;
   final VoidCallback onClients;
   final bool isClientsSelected;
+  final VoidCallback? onSuppliers;
+  final bool isSuppliersSelected;
   final VoidCallback? onAdmin;
   final bool isAdminSelected;
 
@@ -187,23 +211,32 @@ class _WorkspaceNavigation extends StatelessWidget {
       children: [
         _NavigationTab(
           label: 'My Trips',
-          selected: !isAdminSelected && !isClientsSelected,
+          selected:
+              !isAdminSelected && !isClientsSelected && !isSuppliersSelected,
           onPressed: onMyTrips,
         ),
-        const SizedBox(width: AppSpacing.s12),
+        SizedBox(width: onSuppliers == null ? AppSpacing.s12 : AppSpacing.s8),
         _NavigationTab(
           label: 'Clients',
           selected: isClientsSelected,
           onPressed: onClients,
         ),
-        const SizedBox(width: AppSpacing.s12),
+        SizedBox(width: onSuppliers == null ? AppSpacing.s12 : AppSpacing.s8),
+        if (onSuppliers != null) ...[
+          _NavigationTab(
+            label: 'Suppliers',
+            selected: isSuppliersSelected,
+            onPressed: onSuppliers!,
+          ),
+          SizedBox(width: onSuppliers == null ? AppSpacing.s12 : AppSpacing.s8),
+        ],
         _NavigationTab(
           label: 'Reusable Itineraries',
           selected: false,
           onPressed: onReusable,
         ),
         if (onAdmin != null) ...[
-          const SizedBox(width: AppSpacing.s12),
+          SizedBox(width: onSuppliers == null ? AppSpacing.s12 : AppSpacing.s8),
           _NavigationTab(
             label: 'Admin',
             selected: isAdminSelected,

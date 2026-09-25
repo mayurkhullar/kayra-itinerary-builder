@@ -128,6 +128,7 @@ void main() {
             expect(labels, [
               'My Trips',
               'Clients',
+              'Suppliers',
               'Reusable Itineraries',
               if (user.isActiveAdmin) 'Admin',
             ]);
