@@ -17,6 +17,8 @@ class KayraAppHeader extends StatelessWidget {
     required this.onSignOut,
     required this.onPreviewAction,
     required this.onMyTrips,
+    required this.onClients,
+    this.isClientsSelected = false,
     this.onAdmin,
     this.isAdminSelected = false,
     this.isSigningOut = false,
@@ -30,6 +32,8 @@ class KayraAppHeader extends StatelessWidget {
   final VoidCallback onSignOut;
   final VoidCallback onPreviewAction;
   final VoidCallback onMyTrips;
+  final VoidCallback onClients;
+  final bool isClientsSelected;
   final VoidCallback? onAdmin;
   final bool isAdminSelected;
   final bool isSigningOut;
@@ -42,9 +46,7 @@ class KayraAppHeader extends StatelessWidget {
         final isMobile = constraints.maxWidth < AppLayout.mobileBreakpoint;
         final isDesktop = constraints.maxWidth >= AppLayout.desktopBreakpoint;
         final textScale = MediaQuery.textScalerOf(context).scale(16) / 16;
-        final navigationBreakpoint = onAdmin == null
-            ? AppLayout.desktopBreakpoint
-            : AppLayout.dashboardCommandBreakpoint;
+        const navigationBreakpoint = AppLayout.dashboardCommandBreakpoint;
         final showNavigation =
             isDesktop &&
             textScale <= 1.25 &&
@@ -83,6 +85,8 @@ class KayraAppHeader extends StatelessWidget {
                           ),
                           _WorkspaceNavigation(
                             onMyTrips: onMyTrips,
+                            onClients: onClients,
+                            isClientsSelected: isClientsSelected,
                             onReusable: onPreviewAction,
                             onAdmin: onAdmin,
                             isAdminSelected: isAdminSelected,
@@ -115,6 +119,8 @@ class KayraAppHeader extends StatelessWidget {
                               switch (destination) {
                                 case _WorkspaceDestination.myTrips:
                                   onMyTrips();
+                                case _WorkspaceDestination.clients:
+                                  onClients();
                                 case _WorkspaceDestination.reusable:
                                   onPreviewAction();
                                 case _WorkspaceDestination.admin:
@@ -125,6 +131,10 @@ class KayraAppHeader extends StatelessWidget {
                               const PopupMenuItem(
                                 value: _WorkspaceDestination.myTrips,
                                 child: Text('My Trips'),
+                              ),
+                              const PopupMenuItem(
+                                value: _WorkspaceDestination.clients,
+                                child: Text('Clients'),
                               ),
                               const PopupMenuItem(
                                 value: _WorkspaceDestination.reusable,
@@ -152,18 +162,22 @@ class KayraAppHeader extends StatelessWidget {
   }
 }
 
-enum _WorkspaceDestination { myTrips, reusable, admin }
+enum _WorkspaceDestination { myTrips, clients, reusable, admin }
 
 class _WorkspaceNavigation extends StatelessWidget {
   const _WorkspaceNavigation({
     required this.onMyTrips,
     required this.onReusable,
+    required this.onClients,
+    required this.isClientsSelected,
     required this.onAdmin,
     required this.isAdminSelected,
   });
 
   final VoidCallback onMyTrips;
   final VoidCallback onReusable;
+  final VoidCallback onClients;
+  final bool isClientsSelected;
   final VoidCallback? onAdmin;
   final bool isAdminSelected;
 
@@ -173,8 +187,14 @@ class _WorkspaceNavigation extends StatelessWidget {
       children: [
         _NavigationTab(
           label: 'My Trips',
-          selected: !isAdminSelected,
+          selected: !isAdminSelected && !isClientsSelected,
           onPressed: onMyTrips,
+        ),
+        const SizedBox(width: AppSpacing.s12),
+        _NavigationTab(
+          label: 'Clients',
+          selected: isClientsSelected,
+          onPressed: onClients,
         ),
         const SizedBox(width: AppSpacing.s12),
         _NavigationTab(

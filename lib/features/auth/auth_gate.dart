@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../clients/data/client_repository.dart';
 import '../dashboard/presentation/pages/dashboard_page.dart';
 import '../users/data/user_profile_repository.dart';
 import '../users/domain/kayra_user.dart';
@@ -11,10 +12,16 @@ import 'presentation/pages/session_status_page.dart';
 import 'presentation/pages/sign_in_page.dart';
 
 class AuthGate extends StatefulWidget {
-  const AuthGate({super.key, this.authService, this.userProfileRepository});
+  const AuthGate({
+    super.key,
+    this.authService,
+    this.userProfileRepository,
+    this.clientRepository,
+  });
 
   final AuthService? authService;
   final UserProfileRepository? userProfileRepository;
+  final ClientRepository? clientRepository;
 
   @override
   State<AuthGate> createState() => _AuthGateState();
@@ -205,6 +212,7 @@ class _AuthGateState extends State<AuthGate> {
       return DashboardPage(
         user: profile,
         userProfileRepository: _profiles,
+        clientRepository: widget.clientRepository,
         onSignOut: _signOut,
         isSigningOut: _isSigningOut,
       );

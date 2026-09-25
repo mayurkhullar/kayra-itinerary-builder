@@ -3,13 +3,20 @@ import 'package:flutter/material.dart';
 import '../core/theme/app_theme.dart';
 import '../features/auth/auth_gate.dart';
 import '../features/auth/data/auth_service.dart';
+import '../features/clients/data/client_repository.dart';
 import '../features/users/data/user_profile_repository.dart';
 
 class KayraApp extends StatelessWidget {
-  const KayraApp({super.key, this.authService, this.userProfileRepository});
+  const KayraApp({
+    super.key,
+    this.authService,
+    this.userProfileRepository,
+    this.clientRepository,
+  });
 
   final AuthService? authService;
   final UserProfileRepository? userProfileRepository;
+  final ClientRepository? clientRepository;
 
   @override
   Widget build(BuildContext context) {
@@ -20,6 +27,7 @@ class KayraApp extends StatelessWidget {
       home: AuthGate(
         authService: authService,
         userProfileRepository: userProfileRepository,
+        clientRepository: clientRepository,
       ),
     );
   }

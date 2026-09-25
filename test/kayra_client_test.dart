@@ -52,7 +52,7 @@ void main() {
   test(
     'phone strings preserve leading zeroes, plus and supplied formatting',
     () {
-      for (final phone in ['0012345', '+44 (0)20 1234 5678', '012-345']) {
+      for (final phone in ['0012345', '+44 (0)20 1234 5678', '012-3456']) {
         final details = ClientDetails(
           firstName: 'A',
           lastName: 'B',
@@ -76,6 +76,143 @@ void main() {
       isNull,
     );
   });
+
+  for (final phone in [
+    '9876543210',
+    '+91 98765 43210',
+    '+44 20 7946 0958',
+    '(415) 555-2671',
+    '415-555-2671',
+    '123 4567',
+    '1234567',
+    '+123456789012345',
+    '  +91 98765 43210  ',
+  ]) {
+    test(
+      'accepts international display phone $phone and preserves its string',
+      () {
+        expect(ClientValidation.mobileNumberError(phone), isNull);
+        final details = ClientDetails(
+          firstName: 'A',
+          lastName: 'B',
+          mobileNumber: phone,
+        );
+        expect(details.mobileNumber, phone.trim());
+        expect(details.toMap()['mobileNumber'], isA<String>());
+      },
+    );
+  }
+
+  for (final phone in [
+    '',
+    '  ',
+    '123',
+    '123456',
+    '1234567890123456',
+    '12345678901234567890',
+    'abc12345',
+    '+91 phone',
+    '++++919876543210',
+    '++1234567',
+    '123+4567',
+    '1234567+',
+    '123/4567',
+    '123.4567',
+    '123\t4567',
+    '123\n4567',
+    '+ ( ) --',
+  ]) {
+    test(
+      'rejects invalid phone $phone in both shared validator and domain',
+      () {
+        expect(
+          ClientValidation.mobileNumberError(phone),
+          phone.trim().isEmpty
+              ? 'Mobile Number is required.'
+              : 'Enter a valid mobile number.',
+        );
+        expect(
+          () =>
+              ClientDetails(firstName: 'A', lastName: 'B', mobileNumber: phone),
+          throwsFormatException,
+        );
+      },
+    );
+  }
+
+  for (final email in <String?>[
+    null,
+    '',
+    '  ',
+    'name@example.com',
+    'mayur.khullar@kholidaymaps.com',
+    'travel+client@example.co.uk',
+    '  NAME@EXAMPLE.COM  ',
+    'name@travel-company.com',
+  ]) {
+    test('accepts optional email $email and normalizes it', () {
+      expect(ClientValidation.emailError(email), isNull);
+      final details = ClientDetails(
+        firstName: 'A',
+        lastName: 'B',
+        mobileNumber: '1234567',
+        email: email,
+      );
+      expect(
+        details.email,
+        email == null || email.trim().isEmpty
+            ? null
+            : email.trim().toLowerCase(),
+      );
+    });
+  }
+
+  for (final email in [
+    'abc',
+    'abc@',
+    '@example.com',
+    'abc@example',
+    'abc example@example.com',
+    'abc@exam ple.com',
+    'abc@@example.com',
+    'abc..name@example.com',
+    '.abc@example.com',
+    'abc.@example.com',
+    'abc@example..com',
+    'abc@-example.com',
+    'abc@example-.com',
+    'abc@example.com.',
+    'abc\nname@example.com',
+    'abc\n@example.com',
+    'abc@example\n.com',
+    'abc@example.c',
+  ]) {
+    test(
+      'rejects malformed optional email $email in shared and domain validation',
+      () {
+        expect(
+          ClientValidation.emailError(email),
+          'Enter a valid email address.',
+        );
+        expect(
+          () => ClientDetails(
+            firstName: 'A',
+            lastName: 'B',
+            mobileNumber: '1234567',
+            email: email,
+          ),
+          throwsFormatException,
+        );
+        expect(
+          () => KayraClient.fromMap({
+            ..._record(),
+            'email': email,
+          }, documentId: 'client-1'),
+          throwsFormatException,
+        );
+      },
+    );
+  }
 
   for (final field in ['firstName', 'lastName', 'mobileNumber']) {
     for (final value in ['', ' \n ', null, 123, false]) {
