@@ -181,6 +181,38 @@ void main() {
     expect(firestore.updates.single.data['status'], 'failed');
     expect(firestore.updates.single.data['fileIds'], isEmpty);
   });
+  for (final initial in [
+    SupplierSourcePackageStatus.uploaded,
+    SupplierSourcePackageStatus.failed,
+  ]) {
+    for (final target in SupplierSourcePackageStatus.values) {
+      test(
+        'completion rejects terminal ${initial.value} -> ${target.value}',
+        () async {
+          final original = {
+            ..._package(),
+            'status': initial.value,
+            'fileIds': ['original-file'],
+          };
+          firestore.documents['$_packages/package-1'] = Map.of(original);
+          await expectLater(
+            repository.updatePackageAfterUpload(
+              tripId: 'trip-1',
+              packageId: 'package-1',
+              fileIds: ['replacement-file'],
+              status: target,
+            ),
+            target == SupplierSourcePackageStatus.uploading
+                ? throwsFormatException
+                : throwsStateError,
+          );
+          expect(firestore.documents['$_packages/package-1'], original);
+          expect(firestore.updates, isEmpty);
+          expect(firestore.sets, isEmpty);
+        },
+      );
+    }
+  }
   test('completion does not upsert a missing package', () async {
     await expectLater(
       repository.updatePackageAfterUpload(

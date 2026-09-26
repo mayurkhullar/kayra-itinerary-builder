@@ -28,6 +28,8 @@ abstract class SupplierSourceRepository {
     String tripId,
     String packageId,
   );
+
+  /// Completes an uploading package once. Terminal packages cannot be reopened.
   Future<void> updatePackageAfterUpload({
     required String tripId,
     required String packageId,
@@ -36,7 +38,7 @@ abstract class SupplierSourceRepository {
   });
 }
 
-/// Metadata foundation only. Not wired to UI; Firestore rules remain unchanged.
+/// Metadata foundation only. Not wired to UI; Firestore rules enforce access.
 /// No Storage operations or normal file-metadata mutations are exposed.
 class FirestoreSupplierSourceRepository implements SupplierSourceRepository {
   FirestoreSupplierSourceRepository({FirebaseFirestore? firestore})
@@ -177,6 +179,13 @@ class FirestoreSupplierSourceRepository implements SupplierSourceRepository {
       throw const FormatException('Upload outcome must be uploaded or failed.');
     }
     final orderedIds = SupplierSourcePackage.validateFileIds(fileIds, status);
+    final package = await getPackage(tripId, packageId);
+    if (package == null) throw StateError('Source package does not exist.');
+    if (package.status != SupplierSourcePackageStatus.uploading) {
+      throw StateError('A terminal source package cannot be completed again.');
+    }
+    // Rules enforce this transition against the current server state as well,
+    // so a concurrent completion cannot reopen or fail an uploaded package.
     // Update does not upsert or overwrite Supplier linkage or creation metadata.
     await _packages(tripId).doc(packageId).update({
       'fileIds': orderedIds,

@@ -300,6 +300,10 @@ service cloud.firestore {
 
       allow update: if canAccessTripSources(tripId)
         && validSourcePackage(request.resource.data, tripId)
+        // Uploaded status is permanent; failed packages reject every update.
+        && (resource.data.status == 'uploading'
+          || (resource.data.status == 'uploaded'
+            && request.resource.data.status == 'uploaded'))
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'supplierId', 'supplierNameSnapshot', 'fileIds', 'status', 'updatedAt'
         ])
