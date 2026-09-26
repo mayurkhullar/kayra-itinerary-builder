@@ -20,12 +20,14 @@ class TripsWorkspace extends StatefulWidget {
     this.clientRepository,
     required this.onBrowse,
     required this.onClients,
+    required this.onOpenTrip,
   });
   final KayraUser currentUser;
   final TripRepository? tripRepository;
   final ClientRepository? clientRepository;
   final VoidCallback onBrowse;
   final VoidCallback onClients;
+  final ValueChanged<String> onOpenTrip;
   @override
   State<TripsWorkspace> createState() => _TripsWorkspaceState();
 }
@@ -166,6 +168,7 @@ class _TripsWorkspaceState extends State<TripsWorkspace> {
                     active: widget.currentUser.isActive,
                     onRetry: _load,
                     onCreate: _create,
+                    onOpen: widget.onOpenTrip,
                   ),
                 ),
                 const SizedBox(height: AppSpacing.s16),

@@ -28,6 +28,7 @@ class MyTripsList extends StatelessWidget {
     required this.failed,
     required this.onRetry,
     required this.onCreate,
+    required this.onOpen,
     this.active = true,
   });
   final List<KayraTrip>? trips;
@@ -35,6 +36,7 @@ class MyTripsList extends StatelessWidget {
   final bool active;
   final VoidCallback onRetry;
   final VoidCallback onCreate;
+  final ValueChanged<String> onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -89,12 +91,20 @@ class MyTripsList extends StatelessWidget {
           return Card(
             clipBehavior: Clip.antiAlias,
             child: DataTable(
+              showCheckboxColumn: false,
               horizontalMargin: 20,
               columnSpacing: 24,
               dataRowMinHeight: 88,
               dataRowMaxHeight: double.infinity,
               headingRowColor: const WidgetStatePropertyAll(
                 AppColors.background,
+              ),
+              dataRowColor: WidgetStateProperty.resolveWith(
+                (states) =>
+                    states.contains(WidgetState.hovered) ||
+                        states.contains(WidgetState.focused)
+                    ? AppColors.navyTint
+                    : null,
               ),
               columns: [
                 for (final column in {
@@ -112,10 +122,15 @@ class MyTripsList extends StatelessWidget {
               rows: [
                 for (final trip in trips!)
                   DataRow(
-                    key: ValueKey('trip-${trip.id}'),
+                    key: ValueKey('trip-row-${trip.id}'),
+                    mouseCursor: const WidgetStatePropertyAll(
+                      SystemMouseCursors.click,
+                    ),
+                    onSelectChanged: (_) => onOpen(trip.id),
                     cells: [
                       DataCell(
                         Padding(
+                          key: ValueKey('trip-${trip.id}'),
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           child: Text(
                             trip.tripName,
@@ -139,34 +154,49 @@ class MyTripsList extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Card(
-                  key: ValueKey('trip-${trip.id}'),
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          trip.tripName,
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 12),
-                        _travel(context, trip),
-                        const SizedBox(height: 12),
-                        Text(_travellers(trip)),
-                        const SizedBox(height: 12),
-                        Wrap(
-                          spacing: 16,
-                          runSpacing: 8,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            _status(context, trip),
-                            Text(
-                              'Updated ${tripDateLabel(trip.updatedAt.toLocal())}',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ],
-                        ),
-                      ],
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    key: ValueKey('trip-${trip.id}'),
+                    mouseCursor: SystemMouseCursors.click,
+                    onTap: () => onOpen(trip.id),
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  trip.tripName,
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.titleMedium,
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.s8),
+                              const Icon(Icons.chevron_right_rounded, size: 18),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          _travel(context, trip),
+                          const SizedBox(height: 12),
+                          Text(_travellers(trip)),
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 16,
+                            runSpacing: 8,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              _status(context, trip),
+                              Text(
+                                'Updated ${tripDateLabel(trip.updatedAt.toLocal())}',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),

@@ -9,8 +9,11 @@ class FakeTripRepository implements TripRepository {
   final ownerQueries = <String>[];
   int adminQueries = 0;
   final creations = <({String clientId, TripBrief brief, String uid})>[];
+  final tripQueries = <String>[];
   Future<void> Function()? beforeLoad;
+  Future<void> Function()? beforeGet;
   Future<void> Function()? beforeSave;
+  Object? getError;
   @override
   Future<List<KayraTrip>> listOwnedTrips(String ownerUid) async {
     ownerQueries.add(ownerUid);
@@ -50,6 +53,9 @@ class FakeTripRepository implements TripRepository {
 
   @override
   Future<KayraTrip?> getTripById(String tripId) async {
+    tripQueries.add(tripId);
+    await beforeGet?.call();
+    if (getError != null) throw getError!;
     for (final trip in trips) {
       if (trip.id == tripId) return trip;
     }
