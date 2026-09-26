@@ -7,6 +7,7 @@ import '../../../clients/data/client_repository.dart';
 import '../../../suppliers/data/supplier_repository.dart';
 import '../../../suppliers/presentation/pages/suppliers_page.dart';
 import '../../../supplier_sources/data/supplier_source_repository.dart';
+import '../../../supplier_sources/data/supplier_source_upload_dependencies.dart';
 import '../../../clients/presentation/pages/clients_page.dart';
 import '../../../users/domain/kayra_user.dart';
 import '../../../users/data/user_profile_repository.dart';
@@ -26,6 +27,7 @@ class DashboardPage extends StatefulWidget {
     this.tripRepository,
     this.supplierRepository,
     this.supplierSourceRepository,
+    this.supplierSourceUploadDependencies,
   });
 
   final KayraUser user;
@@ -36,6 +38,7 @@ class DashboardPage extends StatefulWidget {
   final TripRepository? tripRepository;
   final SupplierRepository? supplierRepository;
   final SupplierSourceRepository? supplierSourceRepository;
+  final SupplierSourceUploadDependencies? supplierSourceUploadDependencies;
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
@@ -62,9 +65,21 @@ class _DashboardPageState extends State<DashboardPage> {
       widget.supplierSourceRepository ??
       (_defaultSupplierSources ??= FirestoreSupplierSourceRepository());
 
+  SupplierSourceUploadDependencies? _defaultSourceUploadDependencies;
+  SupplierSourceUploadDependencies get _sourceUploadDependencies =>
+      widget.supplierSourceUploadDependencies ??
+      (_defaultSourceUploadDependencies ??=
+          SupplierSourceUploadDependencies.firebase(
+            repository: _supplierSources,
+          ));
+
   @override
   void didUpdateWidget(covariant DashboardPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.supplierSourceRepository != widget.supplierSourceRepository) {
+      _defaultSupplierSources = null;
+      _defaultSourceUploadDependencies = null;
+    }
     if (oldWidget.user.uid != widget.user.uid ||
         oldWidget.user.role != widget.user.role ||
         oldWidget.user.status != widget.user.status ||
@@ -134,6 +149,9 @@ class _DashboardPageState extends State<DashboardPage> {
                       tripId: _selectedTripId!,
                       tripRepository: _trips,
                       supplierSourceRepository: _supplierSources,
+                      supplierRepository: _suppliers,
+                      uploadDependencies: _sourceUploadDependencies,
+                      currentUserUid: user.uid,
                       onBack: _showMyTrips,
                     )
                   : TripsWorkspace(

@@ -6,7 +6,9 @@ import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../shared/widgets/kayra_content_frame.dart';
 import '../../../supplier_sources/data/supplier_source_repository.dart';
+import '../../../supplier_sources/data/supplier_source_upload_dependencies.dart';
 import '../../../supplier_sources/presentation/widgets/supplier_sources_section.dart';
+import '../../../suppliers/data/supplier_repository.dart';
 import '../../data/trip_repository.dart';
 import '../../domain/kayra_trip.dart';
 
@@ -16,12 +18,18 @@ class TripWorkspacePage extends StatefulWidget {
     required this.tripId,
     required this.tripRepository,
     required this.supplierSourceRepository,
+    required this.supplierRepository,
+    required this.uploadDependencies,
+    required this.currentUserUid,
     required this.onBack,
   });
 
   final String tripId;
   final TripRepository tripRepository;
   final SupplierSourceRepository supplierSourceRepository;
+  final SupplierRepository supplierRepository;
+  final SupplierSourceUploadDependencies uploadDependencies;
+  final String currentUserUid;
   final VoidCallback onBack;
 
   @override
@@ -115,7 +123,10 @@ class _TripWorkspacePageState extends State<TripWorkspacePage> {
               const SizedBox(height: AppSpacing.s40),
               SupplierSourcesSection(
                 tripId: widget.tripId,
+                uploadedByUid: widget.currentUserUid,
                 repository: widget.supplierSourceRepository,
+                supplierRepository: widget.supplierRepository,
+                uploadDependencies: widget.uploadDependencies,
               ),
             ],
           ],

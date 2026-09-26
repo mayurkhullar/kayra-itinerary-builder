@@ -6,6 +6,14 @@ enum SupplierSourceUploadFailureKind {
   rollbackIncomplete,
 }
 
+enum SupplierSourceUploadValidationIssue {
+  unsupportedType,
+  emptyFile,
+  tooLarge,
+  changedDuringSelection,
+  unknown,
+}
+
 /// Safe for UI consumption: no SDK messages, filenames or document contents.
 final class SupplierSourceUploadFailure implements Exception {
   SupplierSourceUploadFailure(
@@ -14,6 +22,7 @@ final class SupplierSourceUploadFailure implements Exception {
     this.originalKind,
     List<String> cleanupFailedFileIds = const [],
     this.packageFailureUnconfirmed = false,
+    this.validationIssue,
   }) : cleanupFailedFileIds = List.unmodifiable(cleanupFailedFileIds);
 
   final SupplierSourceUploadFailureKind kind;
@@ -21,6 +30,7 @@ final class SupplierSourceUploadFailure implements Exception {
   final SupplierSourceUploadFailureKind? originalKind;
   final List<String> cleanupFailedFileIds;
   final bool packageFailureUnconfirmed;
+  final SupplierSourceUploadValidationIssue? validationIssue;
 
   String get message => switch (kind) {
     SupplierSourceUploadFailureKind.validation =>

@@ -26,21 +26,21 @@ final class PlatformSupplierSourceFilePicker
       );
       final candidates = <SupplierSourceUploadCandidate>[];
       for (final file in files) {
-        final contentType = SupplierSourceUploadCandidate.contentTypeFor(
-          file.name,
-        );
-        final length = file.lengthSync() ?? await file.length();
-        if (length != null) {
-          SupplierSourceFile.validateMetadata(
-            originalFileName: file.name,
-            contentType: contentType,
-            sizeBytes: length,
+        try {
+          SupplierSourceUploadCandidate.contentTypeFor(file.name);
+        } on FormatException {
+          throw SupplierSourceUploadFailure(
+            SupplierSourceUploadFailureKind.validation,
+            validationIssue:
+                SupplierSourceUploadValidationIssue.unsupportedType,
           );
         }
-        final bytes = await file.readAsBytes();
-        if (length != null && length != bytes.length) {
-          throw const FormatException('Source file changed during selection.');
+        final length = await _knownLength(file);
+        if (length != null) {
+          _validateSize(length);
         }
+        final bytes = await file.readAsBytes();
+        _validateSize(bytes.length);
         candidates.add(
           SupplierSourceUploadCandidate(
             originalFileName: file.name,
@@ -49,9 +49,42 @@ final class PlatformSupplierSourceFilePicker
         );
       }
       return List.unmodifiable(candidates);
+    } on SupplierSourceUploadFailure {
+      rethrow;
     } catch (_) {
       throw SupplierSourceUploadFailure(
         SupplierSourceUploadFailureKind.validation,
+        validationIssue: SupplierSourceUploadValidationIssue.unknown,
+      );
+    }
+  }
+
+  Future<int?> _knownLength(PlatformFile file) async {
+    try {
+      final length = file.lengthSync();
+      if (length != null) return length;
+    } catch (_) {
+      // A readable browser blob may not expose synchronous metadata.
+    }
+    try {
+      return await file.length();
+    } catch (_) {
+      // The bytes remain the authoritative size when metadata is unavailable.
+      return null;
+    }
+  }
+
+  void _validateSize(int sizeBytes) {
+    if (sizeBytes == 0) {
+      throw SupplierSourceUploadFailure(
+        SupplierSourceUploadFailureKind.validation,
+        validationIssue: SupplierSourceUploadValidationIssue.emptyFile,
+      );
+    }
+    if (sizeBytes < 0 || sizeBytes > SupplierSourceFile.maxSizeBytes) {
+      throw SupplierSourceUploadFailure(
+        SupplierSourceUploadFailureKind.validation,
+        validationIssue: SupplierSourceUploadValidationIssue.tooLarge,
       );
     }
   }

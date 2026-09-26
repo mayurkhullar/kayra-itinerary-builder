@@ -4,18 +4,27 @@ import '../../../../core/layout/app_layout.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_spacing.dart';
+import '../../../suppliers/data/supplier_repository.dart';
 import '../../data/supplier_source_repository.dart';
+import '../../data/supplier_source_upload_dependencies.dart';
 import '../../domain/supplier_source_package.dart';
+import 'supplier_source_upload_dialog.dart';
 
 class SupplierSourcesSection extends StatefulWidget {
   const SupplierSourcesSection({
     super.key,
     required this.tripId,
+    required this.uploadedByUid,
     required this.repository,
+    required this.supplierRepository,
+    required this.uploadDependencies,
   });
 
   final String tripId;
+  final String uploadedByUid;
   final SupplierSourceRepository repository;
+  final SupplierRepository supplierRepository;
+  final SupplierSourceUploadDependencies uploadDependencies;
 
   @override
   State<SupplierSourcesSection> createState() => _SupplierSourcesSectionState();
@@ -59,18 +68,69 @@ class _SupplierSourcesSectionState extends State<SupplierSourcesSection> {
     }
   }
 
+  Future<void> _addSource() async {
+    final result = await showDialog<SupplierSourceUploadDialogResult>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => SupplierSourceUploadDialog(
+        tripId: widget.tripId,
+        uploadedByUid: widget.uploadedByUid,
+        supplierRepository: widget.supplierRepository,
+        picker: widget.uploadDependencies.picker,
+        uploadExecutor: widget.uploadDependencies.executor,
+      ),
+    );
+    if (mounted && result?.uploadAttempted == true) await _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Supplier Sources', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: AppSpacing.s4),
-        Text(
-          'Original supplier quotations and itinerary files linked to this trip.',
-          style: Theme.of(
-            context,
-          ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final copy = Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Supplier Sources',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: AppSpacing.s4),
+                Text(
+                  'Original supplier quotations and itinerary files linked to this trip.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            );
+            final action = FilledButton.icon(
+              key: const ValueKey('add-supplier-source'),
+              onPressed: _addSource,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Add Supplier Source'),
+            );
+            if (constraints.maxWidth >= AppLayout.mobileBreakpoint) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: copy),
+                  const SizedBox(width: AppSpacing.s20),
+                  action,
+                ],
+              );
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                copy,
+                const SizedBox(height: AppSpacing.s16),
+                Align(alignment: Alignment.centerLeft, child: action),
+              ],
+            );
+          },
         ),
         const SizedBox(height: AppSpacing.s20),
         if (_packages == null && !_failed)

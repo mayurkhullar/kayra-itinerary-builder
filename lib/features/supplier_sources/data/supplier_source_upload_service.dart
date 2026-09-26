@@ -8,10 +8,22 @@ import 'supplier_source_cleanup_client.dart';
 import 'supplier_source_repository.dart';
 import 'supplier_source_storage_uploader.dart';
 
+abstract interface class SupplierSourceUploadExecutor {
+  Future<CompletedSupplierSourceUpload> upload({
+    required String tripId,
+    required String uploadedByUid,
+    required List<SupplierSourceUploadCandidate> candidates,
+    String? supplierId,
+    String? supplierNameSnapshot,
+    void Function(SupplierSourceUploadProgress progress)? onProgress,
+  });
+}
+
 /// Sequential, one-package upload. Deliberately no user cancellation or retries.
 /// Await writes/tasks to settle before cleanup; a local timeout would leave an
 /// in-flight write/upload able to arrive after rollback.
-final class SupplierSourceUploadService {
+final class SupplierSourceUploadService
+    implements SupplierSourceUploadExecutor {
   SupplierSourceUploadService({
     required SupplierSourceRepository repository,
     required SupplierSourceStorageUploader storage,
@@ -26,6 +38,7 @@ final class SupplierSourceUploadService {
 
   /// [uploadedByUid] must come from the current authenticated session.
   /// Progress observers are advisory: their exceptions cannot abort persistence.
+  @override
   Future<CompletedSupplierSourceUpload> upload({
     required String tripId,
     required String uploadedByUid,

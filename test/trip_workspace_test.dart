@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kayra_crm_v1/core/theme/app_theme.dart';
 import 'package:kayra_crm_v1/features/dashboard/presentation/pages/dashboard_page.dart';
+import 'package:kayra_crm_v1/features/supplier_sources/data/supplier_source_upload_dependencies.dart';
 import 'package:kayra_crm_v1/features/supplier_sources/domain/supplier_source_package.dart';
 import 'package:kayra_crm_v1/features/trips/domain/kayra_trip.dart';
 import 'package:kayra_crm_v1/features/trips/presentation/pages/trip_workspace_page.dart';
@@ -12,7 +13,9 @@ import 'package:kayra_crm_v1/shared/widgets/kayra_app_header.dart';
 
 import 'support/fake_auth_service.dart';
 import 'support/fake_client_repository.dart';
+import 'support/fake_supplier_repository.dart';
 import 'support/fake_supplier_source_repository.dart';
+import 'support/fake_supplier_source_upload.dart';
 import 'support/fake_trip_repository.dart';
 import 'support/fake_user_profile_repository.dart';
 
@@ -82,7 +85,12 @@ void main() {
           userProfileRepository: FakeUserProfileRepository(),
           clientRepository: FakeClientRepository(),
           tripRepository: trips,
+          supplierRepository: FakeSupplierRepository(),
           supplierSourceRepository: sources,
+          supplierSourceUploadDependencies: SupplierSourceUploadDependencies(
+            picker: FakeSupplierSourceFilePicker(),
+            executor: FakeSupplierSourceUploadExecutor(),
+          ),
         ),
       ),
     );
@@ -184,7 +192,7 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(find.textContaining('Upload'), findsNothing);
+      expect(find.text('Add Supplier Source'), findsOneWidget);
       expect(sources.packageQueries, ['trip-1']);
     },
   );

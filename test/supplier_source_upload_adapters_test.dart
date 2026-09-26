@@ -9,18 +9,31 @@ import 'package:kayra_crm_v1/features/supplier_sources/data/supplier_source_stor
 
 void main() {
   test(
-    'Storage adapter calls putData with exact metadata and relays progress',
+    'Storage adapter normalizes bytes and preserves metadata and progress',
     () async {
       final storage = _Storage();
       final uploader = FirebaseSupplierSourceStorageUploader(storage: storage);
       final progress = <(int, int)>[];
+      final backingBytes = Uint8List.fromList([9, 1, 2, 8]);
+      final candidateBytes = Uint8List.sublistView(
+        backingBytes,
+        1,
+        3,
+      ).asUnmodifiableView();
       final result = uploader.upload(
         storagePath: 'trips/t/supplier_sources/f/quote.pdf',
-        bytes: Uint8List.fromList([1, 2]),
+        bytes: candidateBytes,
         contentType: 'application/pdf',
         customMetadata: {'packageId': 'p', 'uploadedByUid': 'u'},
         onProgress: (bytes, total) => progress.add((bytes, total)),
       );
+      final uploadedBytes = storage.reference.bytes;
+      expect(uploadedBytes, isA<Uint8List>());
+      expect(identical(uploadedBytes, candidateBytes), isFalse);
+      expect(uploadedBytes, [1, 2]);
+      expect(uploadedBytes, hasLength(candidateBytes.length));
+      backingBytes[1] = 7;
+      expect(uploadedBytes, [1, 2]);
       storage.task.events.add(_Snapshot(1, 2));
       await Future<void>.delayed(Duration.zero);
       storage.task.done.complete(_Snapshot(2, 2));
@@ -33,6 +46,7 @@ void main() {
         'uploadedByUid': 'u',
       });
       expect(progress, [(1, 2), (2, 2)]);
+      expect(storage.reference.downloadUrlCalls, 0);
       expect(storage.task.events.hasListener, isFalse);
       await storage.task.events.close();
     },
@@ -136,11 +150,18 @@ class _Reference extends Fake implements Reference {
   final _Task task;
   Uint8List? bytes;
   SettableMetadata? metadata;
+  int downloadUrlCalls = 0;
   @override
   UploadTask putData(Uint8List data, [SettableMetadata? metadata]) {
     bytes = data;
     this.metadata = metadata;
     return task;
+  }
+
+  @override
+  Future<String> getDownloadURL() async {
+    downloadUrlCalls += 1;
+    return 'https://example.invalid/source';
   }
 }
 
