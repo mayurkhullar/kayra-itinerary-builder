@@ -6,12 +6,17 @@ import '../domain/supplier_source_validation.dart';
 
 abstract class SupplierSourceRepository {
   /// The UID must come from the authenticated session, not form input.
+  /// Announce the allocated ID synchronously before attempting the write, so
+  /// orchestration can recover even when the server acknowledgement is lost.
   Future<String> createPackage({
     required String tripId,
     required String currentUserUid,
     String? supplierId,
     String? supplierNameSnapshot,
+    void Function(String id)? onIdentityAllocated,
   });
+
+  /// [onIdentityAllocated] must run before the metadata write is attempted.
   Future<String> createFileMetadata({
     required String tripId,
     required String packageId,
@@ -20,6 +25,7 @@ abstract class SupplierSourceRepository {
     required String contentType,
     required int sizeBytes,
     required String currentUserUid,
+    void Function(String id)? onIdentityAllocated,
   });
   Future<SupplierSourcePackage?> getPackage(String tripId, String packageId);
   Future<SupplierSourceFile?> getFile(String tripId, String fileId);
@@ -62,6 +68,7 @@ class FirestoreSupplierSourceRepository implements SupplierSourceRepository {
     required String currentUserUid,
     String? supplierId,
     String? supplierNameSnapshot,
+    void Function(String id)? onIdentityAllocated,
   }) async {
     SupplierSourceValidation.id(currentUserUid);
     SupplierSourcePackage.validateSupplierLink(
@@ -69,6 +76,8 @@ class FirestoreSupplierSourceRepository implements SupplierSourceRepository {
       supplierNameSnapshot,
     );
     final reference = _packages(tripId).doc();
+    // Retain identity before the write, including an ambiguous network failure.
+    onIdentityAllocated?.call(reference.id);
     await reference.set({
       'tripId': tripId,
       'supplierId': supplierId,
@@ -91,6 +100,7 @@ class FirestoreSupplierSourceRepository implements SupplierSourceRepository {
     required String contentType,
     required int sizeBytes,
     required String currentUserUid,
+    void Function(String id)? onIdentityAllocated,
   }) async {
     SupplierSourceValidation.id(packageId);
     SupplierSourceValidation.id(currentUserUid);
@@ -101,6 +111,7 @@ class FirestoreSupplierSourceRepository implements SupplierSourceRepository {
       sizeBytes: sizeBytes,
     );
     final reference = _files(tripId).doc();
+    onIdentityAllocated?.call(reference.id);
     await reference.set({
       'tripId': tripId,
       'packageId': packageId,

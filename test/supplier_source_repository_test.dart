@@ -106,6 +106,40 @@ void main() {
       expect(firestore.readOptions, isEmpty);
     },
   );
+  test('identities are available before failed writes for rollback', () async {
+    firestore.error = StateError('Write acknowledgement unavailable');
+    String? packageId;
+    String? fileId;
+    await expectLater(
+      repository.createPackage(
+        tripId: 'trip-1',
+        currentUserUid: 'agent-1',
+        onIdentityAllocated: (id) {
+          expect(firestore.sets, isEmpty);
+          packageId = id;
+        },
+      ),
+      throwsStateError,
+    );
+    await expectLater(
+      repository.createFileMetadata(
+        tripId: 'trip-1',
+        packageId: packageId!,
+        currentUserUid: 'agent-1',
+        originalFileName: 'quote.pdf',
+        storageFileName: 'quote.pdf',
+        contentType: 'application/pdf',
+        sizeBytes: 1,
+        onIdentityAllocated: (id) {
+          expect(firestore.sets, isEmpty);
+          fileId = id;
+        },
+      ),
+      throwsStateError,
+    );
+    expect(packageId, 'generated-1');
+    expect(fileId, 'generated-2');
+  });
   test(
     'file uses generated ID, deterministic Storage path and server creation time',
     () async {
