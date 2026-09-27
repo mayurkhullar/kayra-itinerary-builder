@@ -37,3 +37,15 @@ exists for the package, it returns that active job instead of creating another.
 Completed and failed jobs allow a new queued attempt. The response contains only
 the job ID, status, and whether it was newly created. Actual source inspection,
 AI processing, and draft creation remain unimplemented.
+
+## Trusted source reader
+
+Future processors must validate Supplier Source evidence through the internal
+server-side source reader before processing it. Firestore metadata alone is not
+sufficient: the reader cross-checks each private Storage object's canonical
+path, content type, size, package identity, and uploader identity.
+
+The reader preserves the Package's exact `fileIds` order and returns only trusted
+provider-independent descriptors. Validation inspects object metadata without
+bulk-loading file contents. Files remain private, and no AI provider is selected
+or called by this layer.
