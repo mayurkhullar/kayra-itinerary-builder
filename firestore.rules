@@ -411,6 +411,14 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /trips/{tripId}/itinerary_extraction_jobs/{jobId} {
+      allow get, list: if canAccessTripItineraries(tripId);
+
+      // Extraction state is authoritative and is written only by a future
+      // trusted backend through the Admin SDK.
+      allow create, update, delete: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
