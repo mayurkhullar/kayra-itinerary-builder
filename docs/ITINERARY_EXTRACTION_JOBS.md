@@ -49,3 +49,8 @@ The reader preserves the Package's exact `fileIds` order and returns only truste
 provider-independent descriptors. Validation inspects object metadata without
 bulk-loading file contents. Files remain private, and no AI provider is selected
 or called by this layer.
+
+A future processor will pass structured provider output through the trusted
+itinerary draft validator/writer before marking a job completed. The boundary
+attaches backend-owned identity, provenance, creator, and audit fields and
+creates a draft only after the full Dart-compatible structure validates.

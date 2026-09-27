@@ -35,3 +35,15 @@ not perform arbitrary document lookups for every `sourcePackageId` in a list.
 
 This model deliberately excludes pricing, margins, payments, flights, visa,
 AI-provider payloads, extraction confidence scores, and master-record matching.
+
+## Trusted backend draft boundary
+
+The Functions backend mirrors this Dart schema with strict runtime validation.
+Future AI/provider output is untrusted and cannot control the Trip ID, Supplier
+Source package IDs, creator UID, document ID, or audit timestamps. Service
+provenance is checked against a previously trusted Supplier Source package and
+its validated file identities.
+
+The backend normalizes only values handled the same way by the Dart models and
+persists a draft only after the complete nested structure is valid. No AI
+provider has been integrated with this boundary.
