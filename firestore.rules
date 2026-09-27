@@ -368,6 +368,49 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    function canAccessTripItineraries(tripId) {
+      // Reuse the same active owner/Admin boundary as other Trip children.
+      return canAccessTripSources(tripId);
+    }
+
+    function validItineraryDraft(data, tripId) {
+      let fields = [
+        'tripId', 'title', 'days', 'sourcePackageIds', 'reviewIssues',
+        'createdByUid', 'createdAt', 'updatedAt'
+      ];
+      return data.keys().hasAll(fields)
+        && data.keys().hasOnly(fields)
+        && data.tripId == tripId
+        && data.title is string && data.title.trim().size() > 0
+        && data.days is list
+        && data.sourcePackageIds is list
+        && data.reviewIssues is list
+        && validTripIdentity(data.createdByUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    match /trips/{tripId}/itinerary_drafts/{draftId} {
+      allow get, list: if canAccessTripItineraries(tripId);
+
+      // Arbitrary sourcePackageIds are deliberately not dereferenced here.
+      // The repository validates same-Trip uploaded packages before writes.
+      allow create: if canAccessTripItineraries(tripId)
+        && validItineraryDraft(request.resource.data, tripId)
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      allow update: if canAccessTripItineraries(tripId)
+        && validItineraryDraft(request.resource.data, tripId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'title', 'days', 'sourcePackageIds', 'reviewIssues', 'updatedAt'
+        ])
+        && request.resource.data.updatedAt == request.time;
+
+      allow delete: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

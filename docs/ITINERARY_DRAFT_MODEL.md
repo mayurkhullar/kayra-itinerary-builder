@@ -26,5 +26,12 @@ All models use strict, deterministic `toMap`/`fromMap` serialization with
 explicit persisted enum values. Domain timestamps are UTC `DateTime` values; a
 future data layer is responsible for converting Firestore timestamps.
 
+Drafts persist at `trips/{tripId}/itinerary_drafts/{draftId}`. Active Agents can
+read and write drafts only for Trips they currently own; active Admins can read
+and write drafts under any existing Trip. Deletion is denied for everyone in
+v1. The repository accepts only existing, uploaded Supplier Source packages from
+the same Trip. Security Rules intentionally enforce the top-level shape and do
+not perform arbitrary document lookups for every `sourcePackageId` in a list.
+
 This model deliberately excludes pricing, margins, payments, flights, visa,
 AI-provider payloads, extraction confidence scores, and master-record matching.
