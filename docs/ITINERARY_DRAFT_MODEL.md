@@ -47,3 +47,7 @@ its validated file identities.
 The backend normalizes only values handled the same way by the Dart models and
 persists a draft only after the complete nested structure is valid. No AI
 provider has been integrated with this boundary.
+
+When the extraction processor creates a draft, draft creation and the matching
+job's `processing` to `completed` transition occur in one Firestore transaction.
+This prevents a completed draft from becoming orphaned behind an unfinished job.

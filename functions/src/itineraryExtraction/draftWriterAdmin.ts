@@ -17,14 +17,14 @@ export function adminDraftWriterDependencies(
             "Parent Trip does not exist.",
           );
         }
-        transaction.create(draft, withServerTimestamps(data));
+        transaction.create(draft, draftWithServerTimestamps(data));
         return draft.id;
       });
     },
   };
 }
 
-function withServerTimestamps(data: DraftCreateData): DraftRecord {
+export function draftWithServerTimestamps(data: DraftCreateData): DraftRecord {
   return {
     ...data,
     createdAt: FieldValue.serverTimestamp(),

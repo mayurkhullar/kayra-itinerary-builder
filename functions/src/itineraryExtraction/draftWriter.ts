@@ -39,12 +39,7 @@ export async function writeTrustedItineraryDraft(
   input: DraftWriteInput,
   dependencies: DraftWriterDependencies,
 ): Promise<DraftWriteResult> {
-  validateBackendInput(input);
-  const validated = validateDraftPayload(
-    input.extractedPayload,
-    input.trustedPackage,
-  );
-  const data = draftData(input, validated);
+  const data = prepareTrustedItineraryDraft(input);
   try {
     const draftId = await dependencies.createDraft(input.tripId, data);
     return {draftId};
@@ -55,6 +50,17 @@ export async function writeTrustedItineraryDraft(
       "Validated itinerary draft could not be persisted.",
     );
   }
+}
+
+export function prepareTrustedItineraryDraft(
+  input: DraftWriteInput,
+): DraftCreateData {
+  validateBackendInput(input);
+  const validated = validateDraftPayload(
+    input.extractedPayload,
+    input.trustedPackage,
+  );
+  return draftData(input, validated);
 }
 
 function validateBackendInput(input: DraftWriteInput): void {

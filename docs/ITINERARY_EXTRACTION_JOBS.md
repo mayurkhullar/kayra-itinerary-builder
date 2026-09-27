@@ -50,7 +50,29 @@ provider-independent descriptors. Validation inspects object metadata without
 bulk-loading file contents. Files remain private, and no AI provider is selected
 or called by this layer.
 
-A future processor will pass structured provider output through the trusted
-itinerary draft validator/writer before marking a job completed. The boundary
-attaches backend-owned identity, provenance, creator, and audit fields and
-creates a draft only after the full Dart-compatible structure validates.
+## Trusted processor core
+
+The internal, provider-independent processor transactionally claims only a
+well-formed queued job. The claim changes `queued` to `processing`, so competing
+workers and later invocations cannot run the same job again. It then validates
+the Supplier Source package with the trusted source reader, invokes one injected
+provider, and treats the provider's structured result as untrusted input to the
+draft validator.
+
+Source-reader errors map to the existing public failure vocabulary:
+`SOURCE_UNAVAILABLE` and `INVALID_SOURCE_INTEGRITY` become
+`source_unavailable`, while `UNSUPPORTED_SOURCE` becomes `unsupported_source`.
+Provider execution failures become `extraction_failed`; invalid structure or
+provenance becomes `invalid_extraction_result`; and atomic persistence failures
+become `draft_persistence_failed`. Raw provider and infrastructure errors are
+not stored on the job.
+
+Successful finalization allocates a backend draft ID, creates the draft, and
+changes the still-processing job to `completed` with the same draft ID in one
+Firestore transaction. Ordinary failures transactionally change only a
+processing job to `failed`. If recording that failure also encounters an
+infrastructure error, the processor reports an internal operational failure and
+the job may remain processing for later manual recovery.
+
+The processor remains internal and has no trigger, callable entry point, source
+byte downloader, or live AI provider.
