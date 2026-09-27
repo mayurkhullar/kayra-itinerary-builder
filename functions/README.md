@@ -11,11 +11,12 @@ npm run build
 npm test
 ```
 
-`src/index.ts` exports one v2 callable, `cleanupSupplierSourceUpload`, in
-`asia-south2`. No deployment is performed by the build or tests. The Admin SDK
-uses the runtime's default Firebase configuration and Storage bucket (the current
-project's generated bucket is `kayra-crm-v1.firebasestorage.app`); no credentials
-or bucket name are hard-coded into function code.
+`src/index.ts` exports the v2 callables `cleanupSupplierSourceUpload` and
+`requestItineraryExtraction` in `asia-south2`. No deployment is performed by the
+build or tests. The Admin SDK uses the runtime's default Firebase configuration
+and Storage bucket (the current project's generated bucket is
+`kayra-crm-v1.firebasestorage.app`); no credentials or bucket name are hard-coded
+into function code.
 
 ## Supplier source rollback
 
@@ -59,3 +60,16 @@ Node's built-in tests use in-memory SDK doubles and do not contact Firebase.
 This follows the Firebase CLI's TypeScript setup without optional lint tooling.
 TypeScript strict checking is enabled. Dependencies and compiled output are
 ignored by Git; commit the npm lockfile for reproducible installs.
+
+## Itinerary extraction request
+
+Input is exactly `{tripId, sourcePackageId}`. The callable requires a signed-in
+company account, an active Agent/Admin profile, current Trip ownership or Admin
+access, and an uploaded same-Trip source package containing files. It creates
+only the provider-independent queued job record.
+
+A Firestore transaction queries attempts for that source package. An existing
+queued/processing job is returned; completed/failed attempts permit a new auto-ID
+job. The query uses the automatic `sourcePackageId` single-field index. The
+response is `{jobId, status, createdNew}`. Source parsing, AI processing, and
+draft creation are outside this callable.

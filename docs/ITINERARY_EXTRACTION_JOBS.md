@@ -23,3 +23,17 @@ processing will own all later transitions.
 
 This contract stores no prompts, responses, source text, provider request IDs,
 or other provider details. No AI provider is selected by this model.
+
+## Request callable
+
+`requestItineraryExtraction` is a second-generation callable in `asia-south2`.
+It accepts exactly `tripId` and `sourcePackageId`. The authenticated caller must
+have a company email, an active Agent/Admin profile, and access as the current
+Trip owner or Admin. Only an uploaded, same-Trip Supplier Source Package with at
+least one file qualifies.
+
+The Function creates only queued jobs. When a queued or processing job already
+exists for the package, it returns that active job instead of creating another.
+Completed and failed jobs allow a new queued attempt. The response contains only
+the job ID, status, and whether it was newly created. Actual source inspection,
+AI processing, and draft creation remain unimplemented.

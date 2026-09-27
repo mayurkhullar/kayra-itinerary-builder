@@ -5,6 +5,10 @@ import {logger} from "firebase-functions";
 import {onCall} from "firebase-functions/v2/https";
 import {cleanupUpload} from "./supplierSources/cleanup";
 import {adminCleanupDependencies} from "./supplierSources/cleanupAdmin";
+import {requestExtraction} from "./itineraryExtraction/request";
+import {
+  adminExtractionRequestDependencies,
+} from "./itineraryExtraction/requestAdmin";
 
 if (getApps().length === 0) initializeApp();
 
@@ -13,6 +17,15 @@ export const cleanupSupplierSourceUpload = onCall(
   async (request) => cleanupUpload(
     request,
     () => adminCleanupDependencies(getFirestore(), getStorage().bucket()),
+    (event, fields) => logger.info(event, fields),
+  ),
+);
+
+export const requestItineraryExtraction = onCall(
+  {region: "asia-south2"},
+  async (request) => requestExtraction(
+    request,
+    () => adminExtractionRequestDependencies(getFirestore()),
     (event, fields) => logger.info(event, fields),
   ),
 );
