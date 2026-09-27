@@ -17,9 +17,9 @@ review.
 
 Flutter clients can read jobs only for Trips available to the current active
 Agent or Admin. Direct client creation, updates, and deletion are denied. A
-future authenticated callable Function will validate Trip access and the
+dedicated authenticated callable Function validates Trip access and the
 uploaded source package before creating a queued job with the Admin SDK. Backend
-processing will own all later transitions.
+processing owns all later transitions.
 
 This contract stores no prompts, responses, source text, provider request IDs,
 or other provider details. No AI provider is selected by this model.
@@ -35,8 +35,8 @@ least one file qualifies.
 The Function creates only queued jobs. When a queued or processing job already
 exists for the package, it returns that active job instead of creating another.
 Completed and failed jobs allow a new queued attempt. The response contains only
-the job ID, status, and whether it was newly created. Actual source inspection,
-AI processing, and draft creation remain unimplemented.
+the job ID, status, and whether it was newly created. Source inspection, AI
+processing, and draft creation remain outside the callable.
 
 ## Trusted source reader
 
@@ -74,8 +74,8 @@ processing job to `failed`. If recording that failure also encounters an
 infrastructure error, the processor reports an internal operational failure and
 the job may remain processing for later manual recovery.
 
-The processor remains internal and has no trigger, callable entry point, source
-byte downloader, or live AI provider.
+The processor remains internal and is invoked only by the Firestore create
+trigger described below. It is not exposed as a callable or HTTP endpoint.
 
 ## Vertex AI provider adapter
 
@@ -83,7 +83,7 @@ The first production provider adapter implements `ItineraryExtractionProvider`
 with the Google Gen AI Node SDK and Vertex AI `gemini-3.5-flash` in the `global`
 location. It uses Application Default Credentials and runtime Google Cloud
 project discovery; it does not use an API key. The adapter remains internal and
-is not connected to a trigger or callable Function.
+is reached only through the trusted processor, never directly from a callable.
 
 Each job makes exactly one model generation call. The versioned
 `kayra_itinerary_extraction_v1` prompt limits the task to factual extraction,
@@ -103,3 +103,23 @@ inputs for this adapter. Any package containing one of these formats is rejected
 before the model call and becomes `unsupported_source`. Other Vertex/model
 execution failures become `extraction_failed`; successfully parsed output that
 does not satisfy Kayra's schema becomes `invalid_extraction_result`.
+
+## Firestore processing trigger
+
+The second-generation `processItineraryExtractionJob` Function listens only for
+document creation at
+`trips/{tripId}/itinerary_extraction_jobs/{jobId}`. It passes the trusted path
+parameters to the existing processor, which reloads and validates the
+authoritative job rather than trusting snapshot fields.
+
+Firestore/Eventarc delivery may occur more than once. The processor's atomic
+`queued -> processing` claim makes duplicate deliveries safe; an already
+claimed or terminal job becomes a successful no-op. A business extraction
+failure that the processor records as terminal `failed` is also treated as a
+handled event. An unresolved infrastructure or failure-finalization error is
+re-thrown so the event infrastructure can retry it.
+
+The trigger runs in `asia-south2` with concurrency 1 and at most two instances,
+keeping parallel model spend deliberately bounded. Live Gemini access remains
+behind `ItineraryExtractionProvider` and uses the configured runtime service
+account through Application Default Credentials.

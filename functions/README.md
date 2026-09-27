@@ -12,9 +12,10 @@ npm test
 ```
 
 `src/index.ts` exports the v2 callables `cleanupSupplierSourceUpload` and
-`requestItineraryExtraction` in `asia-south2`. No deployment is performed by the
-build or tests. The Admin SDK uses the runtime's default Firebase configuration
-and Storage bucket (the current project's generated bucket is
+`requestItineraryExtraction`, plus the v2 Firestore trigger
+`processItineraryExtractionJob`, in `asia-south2`. No deployment is performed by
+the build or tests. The Admin SDK uses the runtime's default Firebase
+configuration and Storage bucket (the current project's generated bucket is
 `kayra-crm-v1.firebasestorage.app`); no credentials or bucket name are hard-coded
 into function code.
 
@@ -74,12 +75,28 @@ job. The query uses the automatic `sourcePackageId` single-field index. The
 response is `{jobId, status, createdNew}`. Source parsing, AI processing, and
 draft creation are outside this callable.
 
+## Itinerary extraction trigger
+
+`processItineraryExtractionJob` listens only for creates at
+`trips/{tripId}/itinerary_extraction_jobs/{jobId}`. It forwards only those path
+identities to the existing trusted processor; snapshot fields are not used as
+authoritative processing input. The production wiring composes the existing
+Admin job store/finalizer, Supplier Source reader, and Vertex Gemini provider.
+
+The trigger uses the runtime service account
+`121704138111-compute@developer.gserviceaccount.com`, retry-enabled event
+delivery, a 540-second timeout, 1 GiB memory, concurrency 1, zero minimum
+instances, and two maximum instances. The transactional `queued -> processing`
+claim makes duplicate delivery a successful no-op. Persisted terminal business
+failures are handled without requesting another retry; unresolved infrastructure
+or failure-finalization errors are re-thrown for event retry.
+
 ## Internal Vertex AI itinerary provider
 
 `@google/genai` supplies the internal Vertex AI adapter for
 `gemini-3.5-flash` in `global`. It uses the runtime project and Application
 Default Credentials, makes one structured JSON generation call per processor
-attempt, and is not exported from `src/index.ts`.
+attempt, and remains behind the processor rather than being exported directly.
 
 PDF/images/plain text remain private and are referenced with `gs://` URIs. CSV
 uses a bounded sequential UTF-8 reader. Office formats are rejected by this

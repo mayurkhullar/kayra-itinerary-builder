@@ -9,6 +9,9 @@ import {requestExtraction} from "./itineraryExtraction/request";
 import {
   adminExtractionRequestDependencies,
 } from "./itineraryExtraction/requestAdmin";
+export {
+  processItineraryExtractionJob,
+} from "./itineraryExtraction/trigger";
 
 if (getApps().length === 0) initializeApp();
 
