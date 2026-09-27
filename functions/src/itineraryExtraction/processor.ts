@@ -50,6 +50,20 @@ export interface ItineraryExtractionProvider {
   extract(input: ItineraryExtractionProviderInput): Promise<unknown>;
 }
 
+export type ItineraryExtractionProviderErrorCode =
+  "UNSUPPORTED_SOURCE" |
+  "PROVIDER_EXECUTION_FAILED";
+
+export class ItineraryExtractionProviderError extends Error {
+  constructor(
+    readonly code: ItineraryExtractionProviderErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ItineraryExtractionProviderError";
+  }
+}
+
 export interface ItineraryExtractionProcessorDependencies {
   jobs: ExtractionJobStore;
   sources: SupplierSourceReaderDependencies;
@@ -135,7 +149,18 @@ export async function processItineraryExtractionJob(
       tripId: job.tripId,
       sourcePackage,
     });
-  } catch (_) {
+  } catch (error) {
+    if (error instanceof ItineraryExtractionProviderError &&
+        error.code === "UNSUPPORTED_SOURCE") {
+      return failProcessingJob(
+        job,
+        "unsupported_source",
+        "SOURCE_FAILURE",
+        "The source package contains a format this provider cannot extract.",
+        dependencies.jobs,
+        log,
+      );
+    }
     return failProcessingJob(
       job,
       "extraction_failed",

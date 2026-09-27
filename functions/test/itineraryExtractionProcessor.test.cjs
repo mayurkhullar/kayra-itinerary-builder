@@ -2,6 +2,7 @@ const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const {FieldValue, Timestamp} = require('firebase-admin/firestore');
 const {
+  ItineraryExtractionProviderError,
   ItineraryExtractionProcessorError,
   processItineraryExtractionJob,
 } = require('../lib/itineraryExtraction/processor');
@@ -369,6 +370,26 @@ test('provider failure is sanitized and becomes extraction_failed', async () => 
   assert.equal(f.admin.records.get(jobPath).failureCode, 'extraction_failed');
   assert.equal(JSON.stringify(f.admin.records.get(jobPath)).includes('SECRET'), false);
   assert.equal(JSON.stringify(f.logs).includes('SECRET'), false);
+});
+
+test('typed provider unsupported source becomes unsupported_source', async () => {
+  const f = processorFixture({
+    provider: {
+      async extract() {
+        throw new ItineraryExtractionProviderError(
+          'UNSUPPORTED_SOURCE',
+          'Office input is unsupported.',
+        );
+      },
+    },
+  });
+  await assert.rejects(
+    f.run(),
+    processorCode('SOURCE_FAILURE', 'unsupported_source'),
+  );
+  assert.equal(f.admin.creates.length, 0);
+  assert.equal(f.admin.records.get(jobPath).status, 'failed');
+  assert.equal(f.admin.records.get(jobPath).failureCode, 'unsupported_source');
 });
 
 for (const [name, payload] of [

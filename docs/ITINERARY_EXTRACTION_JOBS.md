@@ -76,3 +76,30 @@ the job may remain processing for later manual recovery.
 
 The processor remains internal and has no trigger, callable entry point, source
 byte downloader, or live AI provider.
+
+## Vertex AI provider adapter
+
+The first production provider adapter implements `ItineraryExtractionProvider`
+with the Google Gen AI Node SDK and Vertex AI `gemini-3.5-flash` in the `global`
+location. It uses Application Default Credentials and runtime Google Cloud
+project discovery; it does not use an API key. The adapter remains internal and
+is not connected to a trigger or callable Function.
+
+Each job makes exactly one model generation call. The versioned
+`kayra_itinerary_extraction_v1` prompt limits the task to factual extraction,
+and controlled generation requests `application/json` with a JSON schema that
+contains only the fields accepted from a provider by the trusted draft
+validator. Parsed output remains untrusted and receives full structural and
+provenance validation before persistence. Prompts, responses, provider/model
+metadata, and token usage are not persisted in domain documents.
+
+PDF, JPEG, PNG, WebP, and UTF-8 plain text use their existing private Firebase
+Storage objects through ordered `gs://` parts. CSV is read one file at a time,
+bounded again by the 25 MB source limit, decoded as strict UTF-8, and included as
+text. No public, signed, or download URL is created.
+
+DOC, DOCX, XLS, and XLSX remain valid Supplier Source uploads but are not native
+inputs for this adapter. Any package containing one of these formats is rejected
+before the model call and becomes `unsupported_source`. Other Vertex/model
+execution failures become `extraction_failed`; successfully parsed output that
+does not satisfy Kayra's schema becomes `invalid_extraction_result`.

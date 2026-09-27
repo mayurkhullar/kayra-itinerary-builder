@@ -73,3 +73,19 @@ queued/processing job is returned; completed/failed attempts permit a new auto-I
 job. The query uses the automatic `sourcePackageId` single-field index. The
 response is `{jobId, status, createdNew}`. Source parsing, AI processing, and
 draft creation are outside this callable.
+
+## Internal Vertex AI itinerary provider
+
+`@google/genai` supplies the internal Vertex AI adapter for
+`gemini-3.5-flash` in `global`. It uses the runtime project and Application
+Default Credentials, makes one structured JSON generation call per processor
+attempt, and is not exported from `src/index.ts`.
+
+PDF/images/plain text remain private and are referenced with `gs://` URIs. CSV
+uses a bounded sequential UTF-8 reader. Office formats are rejected by this
+adapter until a separate trusted normalization layer exists. No prompt, model
+response, signed URL, API key, or provider metadata is stored in Firestore.
+
+Before live use, enable the Vertex AI API for the Firebase project and grant the
+Functions runtime service account permission to invoke Vertex models, typically
+`roles/aiplatform.user`. No IAM or API changes are applied by this repository.
