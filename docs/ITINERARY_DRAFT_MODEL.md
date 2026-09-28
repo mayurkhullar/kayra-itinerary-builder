@@ -39,14 +39,24 @@ AI-provider payloads, extraction confidence scores, and master-record matching.
 ## Trusted backend draft boundary
 
 The Functions backend mirrors this Dart schema with strict runtime validation.
-Future AI/provider output is untrusted and cannot control the Trip ID, Supplier
-Source package IDs, creator UID, document ID, or audit timestamps. Service
-provenance is checked against a previously trusted Supplier Source package and
-its validated file identities.
+The `kayra_itinerary_extraction_v2` provider contract is a separate sparse DTO:
+it contains extracted facts and their ordering, while unavailable optional
+properties and empty optional lists are omitted. Provider output is untrusted
+and cannot control the Trip ID, creator UID, draft ID, audit timestamps, day
+numbers, service IDs, review issue IDs, or Supplier Source package ID.
 
-The backend normalizes only values handled the same way by the Dart models and
-persists a draft only after the complete nested structure is valid. No AI
-provider has been integrated with this boundary.
+Before persistence, the backend strictly validates the sparse DTO, assigns
+positive sequential day numbers and deterministic ordering-based service and
+review issue IDs, restores every nullable/list/detail field required by this
+persisted schema, and applies the existing full domain validator. This expanded
+shape alone reaches the writer, so the Firestore and Dart draft contract remains
+unchanged.
+
+Package provenance always comes from the trusted job context. A single-file
+package is mapped to its sole validated file automatically. For multi-file
+packages, the provider may return a compact 1-based `fileIndex`; the backend
+checks it against the trusted package file order and maps it to the validated
+file ID. Provider-supplied package IDs and raw file IDs are rejected.
 
 When the extraction processor creates a draft, draft creation and the matching
 job's `processing` to `completed` transition occur in one Firestore transaction.

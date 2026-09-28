@@ -17,12 +17,14 @@ export const geminiTransferTypes = [
 
 export const geminiReviewSeverities = ["warning", "blocker"] as const;
 
-const nullableString = {
-  anyOf: [{type: "string"}, {type: "null"}],
-};
-
-const nullableDate = {
-  anyOf: [{type: "string", format: "date"}, {type: "null"}],
+const source = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    fileIndex: {type: "integer", minimum: 1},
+    sourceLabel: {type: "string"},
+  },
+  propertyOrdering: ["fileIndex", "sourceLabel"],
 };
 
 const hotelDetails = {
@@ -30,16 +32,15 @@ const hotelDetails = {
   additionalProperties: false,
   properties: {
     hotelName: {type: "string"},
-    checkInDate: nullableDate,
-    checkOutDate: nullableDate,
-    roomType: nullableString,
-    mealPlan: nullableString,
-    numberOfRooms: {
-      anyOf: [{type: "integer", minimum: 1}, {type: "null"}],
-    },
-    supplierStarRating: nullableString,
+    checkInDate: {type: "string", format: "date"},
+    checkOutDate: {type: "string", format: "date"},
+    roomType: {type: "string"},
+    mealPlan: {type: "string"},
+    numberOfRooms: {type: "integer", minimum: 1},
+    supplierStarRating: {type: "string"},
   },
-  required: [
+  required: ["hotelName"],
+  propertyOrdering: [
     "hotelName",
     "checkInDate",
     "checkOutDate",
@@ -56,15 +57,16 @@ const transferDetails = {
   properties: {
     pickup: {type: "string"},
     dropoff: {type: "string"},
-    vehicleType: nullableString,
-    transferType: {
-      anyOf: [
-        {type: "string", enum: [...geminiTransferTypes]},
-        {type: "null"},
-      ],
-    },
+    vehicleType: {type: "string"},
+    transferType: {type: "string", enum: [...geminiTransferTypes]},
   },
-  required: ["pickup", "dropoff", "vehicleType", "transferType"],
+  required: ["pickup", "dropoff"],
+  propertyOrdering: [
+    "pickup",
+    "dropoff",
+    "vehicleType",
+    "transferType",
+  ],
 };
 
 const activityDetails = {
@@ -72,63 +74,48 @@ const activityDetails = {
   additionalProperties: false,
   properties: {
     activityName: {type: "string"},
-    duration: nullableString,
-    activityType: nullableString,
+    duration: {type: "string"},
+    activityType: {type: "string"},
   },
-  required: ["activityName", "duration", "activityType"],
-};
-
-const sourceReference = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    supplierSourcePackageId: {type: "string"},
-    supplierSourceFileId: nullableString,
-    sourceLabel: nullableString,
-  },
-  required: [
-    "supplierSourcePackageId",
-    "supplierSourceFileId",
-    "sourceLabel",
-  ],
+  required: ["activityName"],
+  propertyOrdering: ["activityName", "duration", "activityType"],
 };
 
 const service = {
   type: "object",
   additionalProperties: false,
   properties: {
-    id: {type: "string"},
     type: {type: "string", enum: [...geminiServiceTypes]},
     title: {type: "string"},
-    description: nullableString,
-    startTime: nullableString,
-    endTime: nullableString,
-    location: nullableString,
-    city: nullableString,
+    description: {type: "string"},
+    startTime: {type: "string"},
+    endTime: {type: "string"},
+    location: {type: "string"},
+    city: {type: "string"},
     inclusions: {type: "array", items: {type: "string"}},
     exclusions: {type: "array", items: {type: "string"}},
-    notes: nullableString,
-    hotelDetails: {anyOf: [hotelDetails, {type: "null"}]},
-    transferDetails: {anyOf: [transferDetails, {type: "null"}]},
-    activityDetails: {anyOf: [activityDetails, {type: "null"}]},
-    sourceReference: {anyOf: [sourceReference, {type: "null"}]},
+    notes: {type: "string"},
+    hotelDetails,
+    transferDetails,
+    activityDetails,
+    source,
   },
-  required: [
-    "id",
+  required: ["type"],
+  propertyOrdering: [
     "type",
     "title",
-    "description",
+    "hotelDetails",
+    "transferDetails",
+    "activityDetails",
     "startTime",
     "endTime",
     "location",
     "city",
     "inclusions",
     "exclusions",
+    "description",
     "notes",
-    "hotelDetails",
-    "transferDetails",
-    "activityDetails",
-    "sourceReference",
+    "source",
   ],
 };
 
@@ -136,26 +123,26 @@ const day = {
   type: "object",
   additionalProperties: false,
   properties: {
-    dayNumber: {type: "integer", minimum: 1},
-    date: nullableDate,
+    date: {type: "string", format: "date"},
     title: {type: "string"},
-    summary: nullableString,
+    summary: {type: "string"},
     services: {type: "array", items: service},
-    notes: nullableString,
+    notes: {type: "string"},
   },
-  required: ["dayNumber", "date", "title", "summary", "services", "notes"],
+  required: ["title"],
+  propertyOrdering: ["title", "date", "summary", "services", "notes"],
 };
 
 const reviewIssue = {
   type: "object",
   additionalProperties: false,
   properties: {
-    id: {type: "string"},
     fieldPath: {type: "string"},
     message: {type: "string"},
     severity: {type: "string", enum: [...geminiReviewSeverities]},
   },
-  required: ["id", "fieldPath", "message", "severity"],
+  required: ["fieldPath", "message", "severity"],
+  propertyOrdering: ["fieldPath", "message", "severity"],
 };
 
 export const kayraItineraryExtractionResponseSchema = {
@@ -166,6 +153,6 @@ export const kayraItineraryExtractionResponseSchema = {
     days: {type: "array", items: day},
     reviewIssues: {type: "array", items: reviewIssue},
   },
-  required: ["title", "days", "reviewIssues"],
+  required: ["title", "days"],
   propertyOrdering: ["title", "days", "reviewIssues"],
 };

@@ -88,38 +88,21 @@ function sourceFixture() {
   };
 }
 
-function providerPayload(sourceFileId = 'file-2') {
+function providerPayload(fileIndex = 1) {
   return {
     title: ' Trusted itinerary ',
     days: [{
-      dayNumber: 1,
       date: '2027-02-03',
       title: ' Arrival ',
-      summary: null,
       services: [{
-        id: 'service-1',
         type: 'other',
         title: ' Welcome ',
-        description: null,
-        startTime: null,
-        endTime: null,
-        location: null,
-        city: null,
-        inclusions: [],
-        exclusions: [],
-        notes: null,
-        hotelDetails: null,
-        transferDetails: null,
-        activityDetails: null,
-        sourceReference: {
-          supplierSourcePackageId: packageId,
-          supplierSourceFileId: sourceFileId,
+        source: {
+          fileIndex,
           sourceLabel: ' Page 1 ',
         },
       }],
-      notes: null,
     }],
-    reviewIssues: [],
   };
 }
 
@@ -264,6 +247,27 @@ test('queued job is claimed and valid output completes atomically', async () => 
   });
 });
 
+test('successful processing logs monotonic phase and total durations', async () => {
+  const f = processorFixture();
+  await f.run();
+
+  const expectedTimings = [
+    ['itinerary-extraction-job-claimed', 'jobClaimDurationMs'],
+    ['itinerary-extraction-source-validated', 'sourceValidationDurationMs'],
+    ['itinerary-extraction-provider-phase-completed', 'providerDurationMs'],
+    ['itinerary-extraction-draft-validated', 'draftValidationDurationMs'],
+    ['itinerary-extraction-processing-completed',
+      'draftFinalizationDurationMs'],
+    ['itinerary-extraction-processing-completed', 'totalProcessingDurationMs'],
+  ];
+  for (const [event, field] of expectedTimings) {
+    const entry = f.logs.find((log) => log.event === event);
+    assert.ok(entry, `missing ${event}`);
+    assert.equal(Number.isInteger(entry[field]), true, `${event}.${field}`);
+    assert.ok(entry[field] >= 0, `${event}.${field}`);
+  }
+});
+
 test('malformed queued job is rejected before processing side effects', async () => {
   const missingRequester = queuedJob();
   delete missingRequester.requestedByUid;
@@ -370,6 +374,15 @@ test('provider failure is sanitized and becomes extraction_failed', async () => 
   assert.equal(f.admin.records.get(jobPath).failureCode, 'extraction_failed');
   assert.equal(JSON.stringify(f.admin.records.get(jobPath)).includes('SECRET'), false);
   assert.equal(JSON.stringify(f.logs).includes('SECRET'), false);
+  const phaseFailure = f.logs.find((log) =>
+    log.event === 'itinerary-extraction-provider-phase-failed');
+  assert.equal(phaseFailure.category, 'unknown');
+  assert.equal(Number.isInteger(phaseFailure.providerDurationMs), true);
+  assert.ok(phaseFailure.providerDurationMs >= 0);
+  const processingFailure = f.logs.find((log) =>
+    log.event === 'itinerary-extraction-processing-failed');
+  assert.equal(Number.isInteger(processingFailure.totalProcessingDurationMs), true);
+  assert.ok(processingFailure.totalProcessingDurationMs >= 0);
 });
 
 test('typed provider unsupported source becomes unsupported_source', async () => {
@@ -394,7 +407,7 @@ test('typed provider unsupported source becomes unsupported_source', async () =>
 
 for (const [name, payload] of [
   ['malformed output', {title: '', days: [], reviewIssues: []}],
-  ['invalid provenance', providerPayload('unknown-file')],
+  ['invalid provenance', providerPayload(3)],
 ]) {
   test(`${name} becomes invalid_extraction_result without a draft`, async () => {
     const f = processorFixture({provider: {extract: async () => payload}});

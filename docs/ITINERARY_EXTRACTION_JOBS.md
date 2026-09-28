@@ -86,12 +86,58 @@ project discovery; it does not use an API key. The adapter remains internal and
 is reached only through the trusted processor, never directly from a callable.
 
 Each job makes exactly one model generation call. The versioned
-`kayra_itinerary_extraction_v1` prompt limits the task to factual extraction,
-and controlled generation requests `application/json` with a JSON schema that
-contains only the fields accepted from a provider by the trusted draft
-validator. Parsed output remains untrusted and receives full structural and
-provenance validation before persistence. Prompts, responses, provider/model
-metadata, and token usage are not persisted in domain documents.
+`kayra_itinerary_extraction_v2_4` prompt limits the task to factual extraction
+and captures each itinerary-relevant operational fact once. Its service-boundary
+policy consolidates repeated mentions, keeps one supplier item as one service,
+and excludes headings, narrative, and promotional boilerplate from service
+creation. Controlled generation requests `application/json` with one stable,
+sparse service object: unavailable optional properties and empty optional lists
+are omitted, and the provider does not generate structural IDs or day numbers.
+An explicit source day date must populate the structured date field, while
+unsupported date inference remains forbidden. Short operational qualifiers are
+retained once in the most specific existing field. Times remain attached only
+to their explicitly associated event or service.
+
+Hotel check-in and check-out dates require an explicit hotel date or
+source-provided stay span; a dated itinerary day or an overnight-stay statement
+alone does not establish them. The root title preserves an explicit supplier
+title or uses only neutral, source-supported facts. Operational qualifiers stay
+in one appropriate field rather than being repeated. These rules apply by
+semantic meaning across supplier formats and destinations, without relying on a
+particular source layout or benchmark wording.
+
+Transfer operating basis is populated only when the source explicitly supports
+it; a vehicle description or use of a travel pass does not imply private,
+shared, or scheduled service. Traveller movement from an origin to a destination
+by train belongs to one transfer service, while a rail pass product is not
+itself a transfer. An activity's SIC/shared/private operating basis is preserved
+once in the most appropriate existing field rather than stored as its activity
+type or repeated across fields. Extraction
+uncertainty belongs in `reviewIssues` and is not duplicated into day or service
+notes; genuine supplier notes and availability conditions remain itinerary
+facts.
+
+An explicit continuous hotel span covers its intervening nights without noisy
+warnings. When an overnight transition instead depends on assuming that an
+unstated prior hotel continues, the provider creates a concise warning rather
+than inventing accommodation. PDF services may carry a compact `Page N` source
+label when the supporting page is identifiable; the label remains optional,
+and trusted package/file identity continues to come only from the backend.
+
+Parsed output remains untrusted. A dedicated v2 boundary validates it, assigns
+deterministic day/service/review identities, restores the complete persisted
+draft shape, and then passes that result through the existing strict domain
+validator. Supplier Source package identity comes only from trusted job context.
+For multi-file packages, a validated 1-based provider `fileIndex` maps through
+the source reader's trusted file order; single-file packages are mapped
+automatically. The persisted Firestore/Dart draft schema is unchanged. Prompts,
+responses, provider/model metadata, and token usage are not persisted in domain
+documents.
+
+When a provider response ends because of `MAX_TOKENS`, logs include only safe
+aggregate response size, brace-boundary booleans, and counts of fixed JSON object
+keys. Candidate values and source content are never logged. The persisted
+itinerary domain and its validation remain unchanged.
 
 PDF, JPEG, PNG, WebP, and UTF-8 plain text use their existing private Firebase
 Storage objects through ordered `gs://` parts. CSV is read one file at a time,

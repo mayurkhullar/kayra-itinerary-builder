@@ -113,17 +113,32 @@ export async function processItineraryExtractionJob(
 ): Promise<ItineraryExtractionProcessorResult> {
   requireProcessorIdentity(input.tripId, "Trip");
   requireProcessorIdentity(input.jobId, "Itinerary extraction job");
+  const processingStartedAt = performance.now();
   log("itinerary-extraction-processing-started", {
     tripId: input.tripId,
     jobId: input.jobId,
   });
 
-  const job = await claimJob(input, dependencies.jobs);
+  const claimStartedAt = performance.now();
+  let job: ClaimedExtractionJob;
+  try {
+    job = await claimJob(input, dependencies.jobs);
+  } catch (error) {
+    log("itinerary-extraction-job-claim-failed", {
+      tripId: input.tripId,
+      jobId: input.jobId,
+      jobClaimDurationMs: elapsedMilliseconds(claimStartedAt),
+      totalProcessingDurationMs: elapsedMilliseconds(processingStartedAt),
+    });
+    throw error;
+  }
   log("itinerary-extraction-job-claimed", {
     tripId: job.tripId,
     jobId: job.jobId,
+    jobClaimDurationMs: elapsedMilliseconds(claimStartedAt),
   });
 
+  const sourceValidationStartedAt = performance.now();
   let sourcePackage: TrustedSupplierSourcePackage;
   try {
     sourcePackage = await readTrustedSupplierSourcePackage(
@@ -133,6 +148,14 @@ export async function processItineraryExtractionJob(
     );
   } catch (error) {
     const failureCode = sourceFailureCode(error);
+    log("itinerary-extraction-source-validation-failed", {
+      tripId: job.tripId,
+      jobId: job.jobId,
+      sourceValidationDurationMs: elapsedMilliseconds(
+        sourceValidationStartedAt,
+      ),
+      failureCode,
+    });
     return failProcessingJob(
       job,
       failureCode,
@@ -140,9 +163,16 @@ export async function processItineraryExtractionJob(
       "Trusted Supplier Source evidence could not be used.",
       dependencies.jobs,
       log,
+      processingStartedAt,
     );
   }
+  log("itinerary-extraction-source-validated", {
+    tripId: job.tripId,
+    jobId: job.jobId,
+    sourceValidationDurationMs: elapsedMilliseconds(sourceValidationStartedAt),
+  });
 
+  const providerStartedAt = performance.now();
   let extractedPayload: unknown;
   try {
     extractedPayload = await dependencies.provider.extract({
@@ -150,8 +180,15 @@ export async function processItineraryExtractionJob(
       sourcePackage,
     });
   } catch (error) {
+    const providerDurationMs = elapsedMilliseconds(providerStartedAt);
     if (error instanceof ItineraryExtractionProviderError &&
         error.code === "UNSUPPORTED_SOURCE") {
+      log("itinerary-extraction-provider-phase-failed", {
+        tripId: job.tripId,
+        jobId: job.jobId,
+        providerDurationMs,
+        category: error.code,
+      });
       return failProcessingJob(
         job,
         "unsupported_source",
@@ -159,8 +196,16 @@ export async function processItineraryExtractionJob(
         "The source package contains a format this provider cannot extract.",
         dependencies.jobs,
         log,
+        processingStartedAt,
       );
     }
+    log("itinerary-extraction-provider-phase-failed", {
+      tripId: job.tripId,
+      jobId: job.jobId,
+      providerDurationMs,
+      category: error instanceof ItineraryExtractionProviderError ?
+        error.code : "unknown",
+    });
     return failProcessingJob(
       job,
       "extraction_failed",
@@ -168,9 +213,16 @@ export async function processItineraryExtractionJob(
       "The extraction provider did not produce a result.",
       dependencies.jobs,
       log,
+      processingStartedAt,
     );
   }
+  log("itinerary-extraction-provider-phase-completed", {
+    tripId: job.tripId,
+    jobId: job.jobId,
+    providerDurationMs: elapsedMilliseconds(providerStartedAt),
+  });
 
+  const draftValidationStartedAt = performance.now();
   let draft: DraftCreateData;
   try {
     draft = prepareTrustedItineraryDraft({
@@ -181,6 +233,13 @@ export async function processItineraryExtractionJob(
       trustedPackage: sourcePackage,
     });
   } catch (_) {
+    log("itinerary-extraction-draft-validation-failed", {
+      tripId: job.tripId,
+      jobId: job.jobId,
+      draftValidationDurationMs: elapsedMilliseconds(
+        draftValidationStartedAt,
+      ),
+    });
     return failProcessingJob(
       job,
       "invalid_extraction_result",
@@ -188,13 +247,27 @@ export async function processItineraryExtractionJob(
       "The extracted itinerary did not match the trusted schema.",
       dependencies.jobs,
       log,
+      processingStartedAt,
     );
   }
+  log("itinerary-extraction-draft-validated", {
+    tripId: job.tripId,
+    jobId: job.jobId,
+    draftValidationDurationMs: elapsedMilliseconds(draftValidationStartedAt),
+  });
 
+  const draftFinalizationStartedAt = performance.now();
   let draftId: string;
   try {
     draftId = await dependencies.jobs.finalizeCompletedJob(job, draft);
   } catch (_) {
+    log("itinerary-extraction-draft-finalization-failed", {
+      tripId: job.tripId,
+      jobId: job.jobId,
+      draftFinalizationDurationMs: elapsedMilliseconds(
+        draftFinalizationStartedAt,
+      ),
+    });
     return failProcessingJob(
       job,
       "draft_persistence_failed",
@@ -202,6 +275,7 @@ export async function processItineraryExtractionJob(
       "The itinerary draft and job could not be finalized atomically.",
       dependencies.jobs,
       log,
+      processingStartedAt,
     );
   }
 
@@ -209,6 +283,10 @@ export async function processItineraryExtractionJob(
     tripId: job.tripId,
     jobId: job.jobId,
     status: "completed",
+    draftFinalizationDurationMs: elapsedMilliseconds(
+      draftFinalizationStartedAt,
+    ),
+    totalProcessingDurationMs: elapsedMilliseconds(processingStartedAt),
   });
   return {jobId: job.jobId, draftId, status: "completed"};
 }
@@ -243,6 +321,7 @@ async function failProcessingJob(
   message: string,
   jobs: ExtractionJobStore,
   log: ItineraryExtractionProcessorLog,
+  processingStartedAt: number,
 ): Promise<never> {
   try {
     await jobs.markJobFailed(job, failureCode);
@@ -251,6 +330,7 @@ async function failProcessingJob(
       tripId: job.tripId,
       jobId: job.jobId,
       failureCode,
+      totalProcessingDurationMs: elapsedMilliseconds(processingStartedAt),
     });
     throw new ItineraryExtractionProcessorError(
       "JOB_FAILURE_FINALIZATION_FAILED",
@@ -263,12 +343,17 @@ async function failProcessingJob(
     jobId: job.jobId,
     status: "failed",
     failureCode,
+    totalProcessingDurationMs: elapsedMilliseconds(processingStartedAt),
   });
   throw new ItineraryExtractionProcessorError(
     processorCode,
     message,
     failureCode,
   );
+}
+
+function elapsedMilliseconds(startedAt: number): number {
+  return Math.max(0, Math.round(performance.now() - startedAt));
 }
 
 function requireProcessorIdentity(value: unknown, label: string): string {

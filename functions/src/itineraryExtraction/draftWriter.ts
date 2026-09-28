@@ -5,6 +5,7 @@ import {
   ValidatedDraftPayload,
   validateDraftPayload,
 } from "./draftValidation";
+import {normalizeItineraryExtractionV2} from "./providerDraftV2";
 import {TrustedSupplierSourcePackage} from "./sourceReaderValidation";
 
 export interface DraftWriteInput {
@@ -56,10 +57,11 @@ export function prepareTrustedItineraryDraft(
   input: DraftWriteInput,
 ): DraftCreateData {
   validateBackendInput(input);
-  const validated = validateDraftPayload(
+  const normalized = normalizeItineraryExtractionV2(
     input.extractedPayload,
     input.trustedPackage,
   );
+  const validated = validateDraftPayload(normalized, input.trustedPackage);
   return draftData(input, validated);
 }
 

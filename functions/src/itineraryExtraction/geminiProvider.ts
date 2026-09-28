@@ -1,7 +1,10 @@
 import {
+  ApiError,
+  Candidate,
   GenerateContentParameters,
   GenerateContentResponseUsageMetadata,
   GoogleGenAI,
+  ModalityTokenCount,
   Part,
   ThinkingLevel,
 } from "@google/genai";
@@ -38,6 +41,7 @@ const inlineTextContentTypes = new Set(["text/csv"]);
 
 export interface GeminiGenerationResponse {
   readonly text?: string;
+  readonly candidates?: readonly Candidate[];
   readonly usageMetadata?: GenerateContentResponseUsageMetadata;
 }
 
@@ -70,6 +74,7 @@ export function geminiItineraryExtractionProvider(
   const log = options.log ?? (() => {});
   return {
     async extract(input) {
+      let providerStartedAt: number | null = null;
       try {
         validateProviderInput(input);
         const parts = await sourceParts(
@@ -89,9 +94,24 @@ export function geminiItineraryExtractionProvider(
             thinkingConfig: {thinkingLevel: ThinkingLevel.LOW},
           },
         };
-        log("itinerary-extraction-provider-requested", safeFields(input));
+        providerStartedAt = performance.now();
+        log("itinerary-extraction-provider-requested", {
+          ...safeFields(input),
+          providerStartedAt: new Date().toISOString(),
+        });
         const response = await options.client.generateContent(request);
+        const providerDurationMs = elapsedMilliseconds(providerStartedAt);
         const text = response.text;
+        const finishReason = response.candidates?.[0]?.finishReason ?? null;
+        log("itinerary-extraction-provider-completed", {
+          ...safeFields(input),
+          providerDurationMs,
+          candidateCount: response.candidates?.length ?? null,
+          finishReason,
+          ...safeUsage(response.usageMetadata),
+          ...(finishReason === "MAX_TOKENS" && typeof text === "string" ?
+            maxTokensDiagnostics(text) : {}),
+        });
         if (typeof text !== "string" || text.trim().length === 0) {
           throw executionFailure("Gemini returned no usable JSON response.");
         }
@@ -101,10 +121,6 @@ export function geminiItineraryExtractionProvider(
         } catch (_) {
           throw executionFailure("Gemini returned invalid JSON.");
         }
-        log("itinerary-extraction-provider-completed", {
-          ...safeFields(input),
-          ...safeUsage(response.usageMetadata),
-        });
         return parsed;
       } catch (error) {
         const providerError = error instanceof ItineraryExtractionProviderError ?
@@ -112,6 +128,9 @@ export function geminiItineraryExtractionProvider(
         log("itinerary-extraction-provider-failed", {
           ...safeFields(input),
           category: providerError.code,
+          providerDurationMs: providerStartedAt === null ?
+            null : elapsedMilliseconds(providerStartedAt),
+          ...safeProviderFailureMetadata(error),
         });
         throw providerError;
       }
@@ -144,11 +163,7 @@ async function sourceParts(
   const parts: Part[] = [];
   for (let index = 0; index < input.sourcePackage.files.length; index += 1) {
     const file = input.sourcePackage.files[index];
-    const label = sourceLabel(
-      index,
-      input.sourcePackage.packageId,
-      file,
-    );
+    const label = sourceLabel(index, file);
     parts.push({text: label});
     if (gcsContentTypes.has(file.contentType)) {
       parts.push({
@@ -204,13 +219,11 @@ function validateProviderInput(input: ItineraryExtractionProviderInput): void {
 
 function sourceLabel(
   index: number,
-  packageId: string,
   file: TrustedSupplierSourceFile,
 ): string {
   return [
     `SOURCE FILE ${index + 1}`,
-    `sourcePackageId = ${packageId}`,
-    `sourceFileId = ${file.sourceFileId}`,
+    `fileIndex = ${index + 1}`,
     `contentType = ${file.contentType}`,
   ].join("\n");
 }
@@ -236,6 +249,15 @@ function safeFields(
     promptVersion: kayraItineraryExtractionPromptVersion,
     fileCount: input.sourcePackage.files.length,
     mimeTypes: input.sourcePackage.files.map((file) => file.contentType),
+    fileSizesBytes: input.sourcePackage.files.map((file) => file.sizeBytes),
+    totalSourceBytes: input.sourcePackage.files.reduce(
+      (total, file) => total + file.sizeBytes,
+      0,
+    ),
+    inputModes: input.sourcePackage.files.map((file) =>
+      inlineTextContentTypes.has(file.contentType) ?
+        "bounded-inline-text" : "private-gcs-uri"),
+    thinkingLevel: ThinkingLevel.LOW,
   };
 }
 
@@ -244,11 +266,307 @@ function safeUsage(
 ): Record<string, unknown> {
   if (!usage) return {};
   return {
+    cacheTokensDetails: safeTokenDetails(usage.cacheTokensDetails),
     promptTokenCount: usage.promptTokenCount,
+    promptTokensDetails: safeTokenDetails(usage.promptTokensDetails),
     candidatesTokenCount: usage.candidatesTokenCount,
+    candidatesTokensDetails: safeTokenDetails(usage.candidatesTokensDetails),
     thoughtsTokenCount: usage.thoughtsTokenCount,
+    cachedContentTokenCount: usage.cachedContentTokenCount,
+    toolUsePromptTokenCount: usage.toolUsePromptTokenCount,
+    toolUsePromptTokensDetails: safeTokenDetails(
+      usage.toolUsePromptTokensDetails,
+    ),
     totalTokenCount: usage.totalTokenCount,
+    trafficType: usage.trafficType,
   };
+}
+
+function safeTokenDetails(
+  details: ModalityTokenCount[] | undefined,
+): readonly Record<string, unknown>[] | undefined {
+  return details?.map((detail) => ({
+    modality: detail.modality,
+    tokenCount: detail.tokenCount,
+  }));
+}
+
+function elapsedMilliseconds(startedAt: number): number {
+  return Math.max(0, Math.round(performance.now() - startedAt));
+}
+
+const diagnosticJsonKeys = [
+  ["days", "keyCountDays"],
+  ["services", "keyCountServices"],
+  ["type", "keyCountType"],
+  ["fieldPath", "keyCountFieldPath"],
+  ["hotelDetails", "keyCountHotelDetails"],
+  ["transferDetails", "keyCountTransferDetails"],
+  ["activityDetails", "keyCountActivityDetails"],
+  ["description", "keyCountDescription"],
+  ["notes", "keyCountNotes"],
+  ["inclusions", "keyCountInclusions"],
+  ["exclusions", "keyCountExclusions"],
+  ["source", "keyCountSource"],
+] as const;
+
+function maxTokensDiagnostics(text: string): Record<string, unknown> {
+  let responseCharacterCount = 0;
+  for (const _character of text) responseCharacterCount += 1;
+  const fields: Record<string, unknown> = {
+    responseUtf8Bytes: Buffer.byteLength(text, "utf8"),
+    responseCharacterCount,
+    startsWithObjectBrace: boundaryCharacter(text, true) === "{",
+    endsWithObjectBrace: boundaryCharacter(text, false) === "}",
+  };
+  const counts = countFixedJsonObjectKeys(text);
+  for (let index = 0; index < diagnosticJsonKeys.length; index += 1) {
+    fields[diagnosticJsonKeys[index][1]] = counts[index];
+  }
+  return fields;
+}
+
+function countFixedJsonObjectKeys(text: string): readonly number[] {
+  const counts = diagnosticJsonKeys.map(() => 0);
+  let inString = false;
+  let escaped = false;
+  let stringLength = 0;
+  let matches = diagnosticJsonKeys.map(() => false);
+
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    if (!inString) {
+      if (character === "\"") {
+        inString = true;
+        escaped = false;
+        stringLength = 0;
+        matches = diagnosticJsonKeys.map(() => true);
+      }
+      continue;
+    }
+    if (escaped) {
+      escaped = false;
+      matches.fill(false);
+      stringLength += 1;
+      continue;
+    }
+    if (character === "\\") {
+      escaped = true;
+      matches.fill(false);
+      continue;
+    }
+    if (character !== "\"") {
+      for (let keyIndex = 0; keyIndex < diagnosticJsonKeys.length; keyIndex += 1) {
+        if (matches[keyIndex] &&
+            diagnosticJsonKeys[keyIndex][0][stringLength] !== character) {
+          matches[keyIndex] = false;
+        }
+      }
+      stringLength += 1;
+      continue;
+    }
+
+    let following = index + 1;
+    while (following < text.length && isJsonWhitespace(text[following])) {
+      following += 1;
+    }
+    if (text[following] === ":") {
+      for (let keyIndex = 0; keyIndex < diagnosticJsonKeys.length; keyIndex += 1) {
+        if (matches[keyIndex] &&
+            stringLength === diagnosticJsonKeys[keyIndex][0].length) {
+          counts[keyIndex] += 1;
+        }
+      }
+    }
+    inString = false;
+  }
+  return counts;
+}
+
+function boundaryCharacter(text: string, fromStart: boolean): string | null {
+  let index = fromStart ? 0 : text.length - 1;
+  const end = fromStart ? text.length : -1;
+  while (index !== end) {
+    if (!isJsonWhitespace(text[index])) return text[index];
+    index += fromStart ? 1 : -1;
+  }
+  return null;
+}
+
+function isJsonWhitespace(value: string): boolean {
+  return value === " " || value === "\t" || value === "\n" || value === "\r";
+}
+
+const safeRpcStatuses = [
+  "INVALID_ARGUMENT",
+  "UNAUTHENTICATED",
+  "PERMISSION_DENIED",
+  "NOT_FOUND",
+  "RESOURCE_EXHAUSTED",
+  "ABORTED",
+  "INTERNAL",
+  "UNAVAILABLE",
+  "DEADLINE_EXCEEDED",
+] as const;
+
+const safeNetworkCodes = [
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "ETIMEDOUT",
+] as const;
+
+const safeErrorNames = new Set([
+  "ApiError",
+  "APIConnectionError",
+  "APIConnectionTimeoutError",
+  "BadRequestError",
+  "AuthenticationError",
+  "PermissionDeniedError",
+  "NotFoundError",
+  "RateLimitError",
+  "InternalServerError",
+  "GoogleGenAiError",
+  "RequestTimeoutError",
+  "ConnectionError",
+  "UnexpectedClientError",
+  "ItineraryExtractionProviderError",
+  "Error",
+]);
+
+function safeProviderFailureMetadata(error: unknown): Record<string, unknown> {
+  const errorName = safeErrorName(error);
+  const httpStatus = safeHttpStatus(error);
+  const errorCode = safeErrorCode(error);
+  const rpcStatus = safeRpcStatus([
+    safeStringProperty(error, "status"),
+    safeStringProperty(error, "reason"),
+    errorCode,
+    safeStringProperty(error, "message"),
+  ]) ?? rpcStatusForHttpStatus(httpStatus);
+  const fields: Record<string, unknown> = {
+    providerErrorName: errorName,
+    providerFailureCategory: providerFailureCategory(
+      rpcStatus,
+      httpStatus,
+      errorCode,
+      errorName,
+    ),
+  };
+  if (httpStatus !== null) fields.providerHttpStatus = httpStatus;
+  if (rpcStatus !== null) fields.providerRpcStatus = rpcStatus;
+  if (errorCode !== null) fields.providerErrorCode = errorCode;
+  return fields;
+}
+
+function safeErrorName(error: unknown): string {
+  const name = safeStringProperty(error, "name");
+  return name !== null && safeErrorNames.has(name) ? name : "unknown";
+}
+
+function safeHttpStatus(error: unknown): number | null {
+  const apiStatus = error instanceof ApiError ? error.status : null;
+  for (const candidate of [
+    apiStatus,
+    safeNumberProperty(error, "statusCode"),
+    safeNumberProperty(error, "status"),
+  ]) {
+    if (candidate !== null && Number.isInteger(candidate) &&
+        candidate >= 100 && candidate <= 599) {
+      return candidate;
+    }
+  }
+  const message = safeStringProperty(error, "message");
+  if (message === null) return null;
+  const match = message.match(
+    /(?:^|\D)(400|401|403|404|408|409|429|500|502|503|504)(?:\D|$)/,
+  );
+  return match ? Number(match[1]) : null;
+}
+
+function safeErrorCode(error: unknown): string | null {
+  const code = safeStringProperty(error, "code");
+  if (code === null) return null;
+  if ((safeNetworkCodes as readonly string[]).includes(code) ||
+      (safeRpcStatuses as readonly string[]).includes(code)) {
+    return code;
+  }
+  return null;
+}
+
+function safeRpcStatus(values: readonly (string | null)[]):
+    typeof safeRpcStatuses[number] | null {
+  for (const value of values) {
+    if (value === null) continue;
+    for (const status of safeRpcStatuses) {
+      if (new RegExp(`(?:^|[^A-Z_])${status}(?:[^A-Z_]|$)`, "i").test(value)) {
+        return status;
+      }
+    }
+  }
+  return null;
+}
+
+function rpcStatusForHttpStatus(
+  status: number | null,
+): typeof safeRpcStatuses[number] | null {
+  switch (status) {
+    case 400: return "INVALID_ARGUMENT";
+    case 401: return "UNAUTHENTICATED";
+    case 403: return "PERMISSION_DENIED";
+    case 404: return "NOT_FOUND";
+    case 408:
+    case 504: return "DEADLINE_EXCEEDED";
+    case 409: return "ABORTED";
+    case 429: return "RESOURCE_EXHAUSTED";
+    case 500: return "INTERNAL";
+    case 502:
+    case 503: return "UNAVAILABLE";
+    default: return null;
+  }
+}
+
+function providerFailureCategory(
+  rpcStatus: typeof safeRpcStatuses[number] | null,
+  httpStatus: number | null,
+  errorCode: string | null,
+  errorName: string,
+): string {
+  if (rpcStatus !== null) return rpcStatus.toLowerCase();
+  if (httpStatus !== null) return "http_error";
+  if (errorCode !== null) return errorCode === "ETIMEDOUT" ?
+    "deadline_exceeded" : "network_error";
+  if ([
+    "APIConnectionTimeoutError",
+    "RequestTimeoutError",
+  ].includes(errorName)) return "deadline_exceeded";
+  if ([
+    "APIConnectionError",
+    "ConnectionError",
+    "UnexpectedClientError",
+  ].includes(errorName)) return "network_error";
+  return "unknown";
+}
+
+function safeStringProperty(error: unknown, key: string): string | null {
+  const value = safeProperty(error, key);
+  return typeof value === "string" ? value : null;
+}
+
+function safeNumberProperty(error: unknown, key: string): number | null {
+  const value = safeProperty(error, key);
+  return typeof value === "number" ? value : null;
+}
+
+function safeProperty(error: unknown, key: string): unknown {
+  if ((typeof error !== "object" && typeof error !== "function") ||
+      error === null) return null;
+  try {
+    return (error as Record<string, unknown>)[key];
+  } catch (_) {
+    return null;
+  }
 }
 
 function executionFailure(message: string): ItineraryExtractionProviderError {

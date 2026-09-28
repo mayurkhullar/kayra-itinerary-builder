@@ -128,7 +128,11 @@ function reviewIssue(severity = 'warning', overrides = {}) {
   };
 }
 
-function input(extractedPayload = payload(), overrides = {}) {
+function providerPayload(overrides = {}) {
+  return {title: 'Dubai Escape', days: [], ...overrides};
+}
+
+function input(extractedPayload = providerPayload(), overrides = {}) {
   return {
     tripId: 'trip-1',
     sourcePackageId: 'package-1',
@@ -491,10 +495,16 @@ test('missing parent Trip is rejected without a document write', async () => {
   assert.deepEqual(f.state.creates, []);
 });
 
-test('representative persisted payload matches Dart fromMap schema', async () => {
-  const fullPayload = payload({
+test('representative sparse payload persists with the Dart fromMap schema', async () => {
+  const sparsePayload = providerPayload({
     days: [{
-      ...day(2, [service('hotel', {
+      title: 'Arrival',
+      date: '2027-01-10',
+      summary: 'Arrival',
+      notes: 'Welcome',
+      services: [{
+        type: 'hotel',
+        title: 'Hotel stay',
         description: ' Stay ',
         startTime: ' 14:00 ',
         endTime: ' 11:00 ',
@@ -503,17 +513,26 @@ test('representative persisted payload matches Dart fromMap schema', async () =>
         inclusions: [' Breakfast '],
         exclusions: [' Tourism fee '],
         notes: ' Confirm room ',
-        hotelDetails: hotelDetails(),
-        sourceReference: sourceReference(),
-      })]),
-      date: '2027-01-10',
-      summary: ' Arrival ',
-      notes: ' Welcome ',
+        hotelDetails: {
+          hotelName: 'Example Hotel',
+          checkInDate: '2027-01-10',
+          checkOutDate: '2027-01-12',
+          roomType: 'Deluxe',
+          mealPlan: 'Breakfast',
+          numberOfRooms: 2,
+          supplierStarRating: '5 Star',
+        },
+        source: {fileIndex: 1, sourceLabel: 'Page 2'},
+      }],
     }],
-    reviewIssues: [reviewIssue('blocker')],
+    reviewIssues: [{
+      fieldPath: 'days[0].services[0].startTime',
+      message: 'Confirm timing.',
+      severity: 'blocker',
+    }],
   });
   const f = adminFixture();
-  await writeTrustedItineraryDraft(input(fullPayload), f.dependencies);
+  await writeTrustedItineraryDraft(input(sparsePayload), f.dependencies);
   const draft = f.state.creates[0].data;
   const persistedDay = draft.days[0];
   const persistedService = persistedDay.services[0];
