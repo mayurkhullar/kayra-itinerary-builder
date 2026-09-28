@@ -18,6 +18,7 @@ import 'package:kayra_crm_v1/features/trips/presentation/pages/trip_workspace_pa
 
 import 'support/fake_auth_service.dart';
 import 'support/fake_client_repository.dart';
+import 'support/fake_itinerary_extraction.dart';
 import 'support/fake_supplier_repository.dart';
 import 'support/fake_supplier_source_repository.dart';
 import 'support/fake_supplier_source_upload.dart';
@@ -87,6 +88,7 @@ void main() {
   late FakeSupplierSourceFilePicker picker;
   late FakeSupplierSourceUploadExecutor executor;
   late SupplierSourceUploadDependencies dependencies;
+  late FakeItineraryExtractionJobRepository extractionJobs;
 
   setUp(() {
     suppliers = FakeSupplierRepository();
@@ -97,6 +99,8 @@ void main() {
       picker: picker,
       executor: executor,
     );
+    extractionJobs = FakeItineraryExtractionJobRepository();
+    addTearDown(extractionJobs.dispose);
   });
 
   void viewport(WidgetTester tester, double width, {double height = 900}) {
@@ -119,6 +123,7 @@ void main() {
               repository: sources,
               supplierRepository: suppliers,
               uploadDependencies: dependencies,
+              extractionDependencies: extractionJobs.dependencies(),
             ),
           ),
         ),
@@ -390,6 +395,7 @@ void main() {
             supplierRepository: suppliers,
             supplierSourceRepository: sources,
             supplierSourceUploadDependencies: dependencies,
+            itineraryExtractionDependencies: extractionJobs.dependencies(),
           ),
         ),
       );

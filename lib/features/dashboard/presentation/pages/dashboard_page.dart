@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/layout/app_layout.dart';
 import '../../../trips/data/trip_repository.dart';
+import '../../../itineraries/data/itinerary_extraction_dependencies.dart';
 import '../../../../shared/widgets/kayra_app_header.dart';
 import '../../../clients/data/client_repository.dart';
 import '../../../suppliers/data/supplier_repository.dart';
@@ -28,6 +29,7 @@ class DashboardPage extends StatefulWidget {
     this.supplierRepository,
     this.supplierSourceRepository,
     this.supplierSourceUploadDependencies,
+    this.itineraryExtractionDependencies,
   });
 
   final KayraUser user;
@@ -39,6 +41,7 @@ class DashboardPage extends StatefulWidget {
   final SupplierRepository? supplierRepository;
   final SupplierSourceRepository? supplierSourceRepository;
   final SupplierSourceUploadDependencies? supplierSourceUploadDependencies;
+  final ItineraryExtractionDependencies? itineraryExtractionDependencies;
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
@@ -73,12 +76,22 @@ class _DashboardPageState extends State<DashboardPage> {
             repository: _supplierSources,
           ));
 
+  ItineraryExtractionDependencies? _defaultExtractionDependencies;
+  ItineraryExtractionDependencies get _extractionDependencies =>
+      widget.itineraryExtractionDependencies ??
+      (_defaultExtractionDependencies ??=
+          ItineraryExtractionDependencies.firebase());
+
   @override
   void didUpdateWidget(covariant DashboardPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.supplierSourceRepository != widget.supplierSourceRepository) {
       _defaultSupplierSources = null;
       _defaultSourceUploadDependencies = null;
+    }
+    if (oldWidget.itineraryExtractionDependencies !=
+        widget.itineraryExtractionDependencies) {
+      _defaultExtractionDependencies = null;
     }
     if (oldWidget.user.uid != widget.user.uid ||
         oldWidget.user.role != widget.user.role ||
@@ -151,6 +164,7 @@ class _DashboardPageState extends State<DashboardPage> {
                       supplierSourceRepository: _supplierSources,
                       supplierRepository: _suppliers,
                       uploadDependencies: _sourceUploadDependencies,
+                      extractionDependencies: _extractionDependencies,
                       currentUserUid: user.uid,
                       onBack: _showMyTrips,
                     )

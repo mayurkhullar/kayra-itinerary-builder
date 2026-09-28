@@ -14,6 +14,8 @@ abstract class ItineraryExtractionJobRepository {
 
   Future<KayraItineraryExtractionJob?> getJob(String tripId, String jobId);
 
+  Stream<KayraItineraryExtractionJob?> observeJob(String tripId, String jobId);
+
   Future<List<KayraItineraryExtractionJob>> listJobsForTrip(String tripId);
 
   Future<void> markProcessing({required String tripId, required String jobId});
@@ -98,6 +100,15 @@ final class FirestoreItineraryExtractionJobRepository
         .get(const GetOptions(source: Source.server))
         .timeout(const Duration(seconds: 30));
     return snapshot.exists ? _readJob(snapshot, tripId) : null;
+  }
+
+  @override
+  Stream<KayraItineraryExtractionJob?> observeJob(String tripId, String jobId) {
+    ItineraryModelValidation.id(jobId, 'itinerary extraction job');
+    return _jobs(tripId)
+        .doc(jobId)
+        .snapshots()
+        .map((snapshot) => snapshot.exists ? _readJob(snapshot, tripId) : null);
   }
 
   @override

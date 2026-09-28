@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kayra_crm_v1/features/itineraries/data/itinerary_extraction_job_repository.dart';
@@ -55,6 +57,7 @@ void main() {
       firestore: firestore,
       sourceRepository: sources,
     );
+    addTearDown(firestore.dispose);
   });
 
   test(
@@ -137,6 +140,29 @@ void main() {
     expect(firestore.orders.single, (field: 'createdAt', descending: true));
     expect(() => jobs.clear(), throwsUnsupportedError);
   });
+
+  test(
+    'observe one job deserializes live snapshots with the domain model',
+    () async {
+      final values = repository
+          .observeJob('trip-1', 'job-live')
+          .take(2)
+          .toList();
+      firestore.emit(
+        '$_jobs/job-live',
+        _record(status: KayraItineraryExtractionStatus.processing),
+      );
+      firestore.emit('$_jobs/job-live', null);
+
+      final observed = await values;
+      expect(observed.first, isA<KayraItineraryExtractionJob>());
+      expect(observed.first!.id, 'job-live');
+      expect(observed.first!.status, KayraItineraryExtractionStatus.processing);
+      expect(observed.last, isNull);
+      expect(firestore.sets, isEmpty);
+      expect(firestore.transactionUpdates, isEmpty);
+    },
+  );
 
   test('queued to processing succeeds transactionally', () async {
     firestore.documents['$_jobs/job-1'] = _record();
@@ -266,6 +292,8 @@ class _FakeFirestore extends Fake implements FirebaseFirestore {
   final orders = <({Object field, bool descending})>[];
   int transactionRuns = 0;
   int _nextId = 0;
+  final streams =
+      <String, StreamController<DocumentSnapshot<Map<String, dynamic>>>>{};
 
   @override
   CollectionReference<Map<String, dynamic>> collection(String path) =>
@@ -289,6 +317,16 @@ class _FakeFirestore extends Fake implements FirebaseFirestore {
                 !entry.key.substring(path.length + 1).contains('/'),
           )
           .toList();
+
+  void emit(String path, Map<String, dynamic>? data) {
+    streams
+        .putIfAbsent(path, StreamController.broadcast)
+        .add(_Snapshot(path.split('/').last, data));
+  }
+
+  Future<void> dispose() async {
+    await Future.wait(streams.values.map((stream) => stream.close()));
+  }
 }
 
 // ignore: subtype_of_sealed_class
@@ -362,6 +400,12 @@ class _Reference extends Fake
   Future<DocumentSnapshot<Map<String, dynamic>>> get([
     GetOptions? options,
   ]) async => _Snapshot(id, firestore.documents[path]);
+
+  @override
+  Stream<DocumentSnapshot<Map<String, dynamic>>> snapshots({
+    bool includeMetadataChanges = false,
+    ListenSource source = ListenSource.defaultSource,
+  }) => firestore.streams.putIfAbsent(path, StreamController.broadcast).stream;
 }
 
 // ignore: subtype_of_sealed_class

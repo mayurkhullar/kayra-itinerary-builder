@@ -5,6 +5,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../shared/widgets/kayra_content_frame.dart';
+import '../../../itineraries/data/itinerary_extraction_dependencies.dart';
 import '../../../supplier_sources/data/supplier_source_repository.dart';
 import '../../../supplier_sources/data/supplier_source_upload_dependencies.dart';
 import '../../../supplier_sources/presentation/widgets/supplier_sources_section.dart';
@@ -20,6 +21,7 @@ class TripWorkspacePage extends StatefulWidget {
     required this.supplierSourceRepository,
     required this.supplierRepository,
     required this.uploadDependencies,
+    required this.extractionDependencies,
     required this.currentUserUid,
     required this.onBack,
   });
@@ -29,6 +31,7 @@ class TripWorkspacePage extends StatefulWidget {
   final SupplierSourceRepository supplierSourceRepository;
   final SupplierRepository supplierRepository;
   final SupplierSourceUploadDependencies uploadDependencies;
+  final ItineraryExtractionDependencies extractionDependencies;
   final String currentUserUid;
   final VoidCallback onBack;
 
@@ -127,6 +130,7 @@ class _TripWorkspacePageState extends State<TripWorkspacePage> {
                 repository: widget.supplierSourceRepository,
                 supplierRepository: widget.supplierRepository,
                 uploadDependencies: widget.uploadDependencies,
+                extractionDependencies: widget.extractionDependencies,
               ),
             ],
           ],

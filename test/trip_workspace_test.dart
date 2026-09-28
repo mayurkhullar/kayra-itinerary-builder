@@ -13,6 +13,7 @@ import 'package:kayra_crm_v1/shared/widgets/kayra_app_header.dart';
 
 import 'support/fake_auth_service.dart';
 import 'support/fake_client_repository.dart';
+import 'support/fake_itinerary_extraction.dart';
 import 'support/fake_supplier_repository.dart';
 import 'support/fake_supplier_source_repository.dart';
 import 'support/fake_supplier_source_upload.dart';
@@ -61,11 +62,14 @@ SupplierSourcePackage _package({
 void main() {
   late FakeTripRepository trips;
   late FakeSupplierSourceRepository sources;
+  late FakeItineraryExtractionJobRepository extractionJobs;
 
   setUp(() {
     trips = FakeTripRepository(clients: FakeClientRepository())
       ..trips.add(_trip());
     sources = FakeSupplierSourceRepository();
+    extractionJobs = FakeItineraryExtractionJobRepository();
+    addTearDown(extractionJobs.dispose);
   });
 
   void viewport(WidgetTester tester, double width, {double height = 1000}) {
@@ -91,6 +95,7 @@ void main() {
             picker: FakeSupplierSourceFilePicker(),
             executor: FakeSupplierSourceUploadExecutor(),
           ),
+          itineraryExtractionDependencies: extractionJobs.dependencies(),
         ),
       ),
     );

@@ -4,10 +4,13 @@ import '../../../../core/layout/app_layout.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_spacing.dart';
+import '../../../itineraries/data/itinerary_extraction_dependencies.dart';
+import '../../../itineraries/presentation/controllers/itinerary_extraction_controller.dart';
 import '../../../suppliers/data/supplier_repository.dart';
 import '../../data/supplier_source_repository.dart';
 import '../../data/supplier_source_upload_dependencies.dart';
 import '../../domain/supplier_source_package.dart';
+import 'supplier_source_extraction_status.dart';
 import 'supplier_source_upload_dialog.dart';
 
 class SupplierSourcesSection extends StatefulWidget {
@@ -18,6 +21,7 @@ class SupplierSourcesSection extends StatefulWidget {
     required this.repository,
     required this.supplierRepository,
     required this.uploadDependencies,
+    required this.extractionDependencies,
   });
 
   final String tripId;
@@ -25,6 +29,7 @@ class SupplierSourcesSection extends StatefulWidget {
   final SupplierSourceRepository repository;
   final SupplierRepository supplierRepository;
   final SupplierSourceUploadDependencies uploadDependencies;
+  final ItineraryExtractionDependencies extractionDependencies;
 
   @override
   State<SupplierSourcesSection> createState() => _SupplierSourcesSectionState();
@@ -34,10 +39,12 @@ class _SupplierSourcesSectionState extends State<SupplierSourcesSection> {
   List<SupplierSourcePackage>? _packages;
   bool _failed = false;
   int _request = 0;
+  late ItineraryExtractionController _extractions;
 
   @override
   void initState() {
     super.initState();
+    _createExtractionController();
     _load();
   }
 
@@ -45,9 +52,31 @@ class _SupplierSourcesSectionState extends State<SupplierSourcesSection> {
   void didUpdateWidget(covariant SupplierSourcesSection oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.tripId != widget.tripId ||
-        oldWidget.repository != widget.repository) {
+        oldWidget.repository != widget.repository ||
+        oldWidget.extractionDependencies != widget.extractionDependencies) {
+      _disposeExtractionController();
+      _createExtractionController();
       _load();
     }
+  }
+
+  void _createExtractionController() {
+    _extractions = ItineraryExtractionController(
+      tripId: widget.tripId,
+      jobs: widget.extractionDependencies.jobs,
+      requests: widget.extractionDependencies.requests,
+    )..addListener(_onExtractionChanged);
+    _extractions.load();
+  }
+
+  void _disposeExtractionController() {
+    _extractions
+      ..removeListener(_onExtractionChanged)
+      ..dispose();
+  }
+
+  void _onExtractionChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _load() async {
@@ -80,7 +109,16 @@ class _SupplierSourcesSectionState extends State<SupplierSourcesSection> {
         uploadExecutor: widget.uploadDependencies.executor,
       ),
     );
-    if (mounted && result?.uploadAttempted == true) await _load();
+    if (mounted && result?.uploadAttempted == true) {
+      await Future.wait([_load(), _extractions.load()]);
+    }
+  }
+
+  @override
+  void dispose() {
+    _request++;
+    _disposeExtractionController();
+    super.dispose();
   }
 
   @override
@@ -156,16 +194,27 @@ class _SupplierSourcesSectionState extends State<SupplierSourcesSection> {
                 'Supplier quotations and itinerary files will appear here once added.',
           )
         else
-          _PackageList(packages: _packages!),
+          _PackageList(
+            packages: _packages!,
+            extractionState: _extractions.stateFor,
+            onRequestExtraction: (package) => _extractions.request(package.id),
+          ),
       ],
     );
   }
 }
 
 class _PackageList extends StatelessWidget {
-  const _PackageList({required this.packages});
+  const _PackageList({
+    required this.packages,
+    required this.extractionState,
+    required this.onRequestExtraction,
+  });
 
   final List<SupplierSourcePackage> packages;
+  final ItineraryExtractionPackageState Function(SupplierSourcePackage)
+  extractionState;
+  final ValueChanged<SupplierSourcePackage> onRequestExtraction;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -179,6 +228,8 @@ class _PackageList extends StatelessWidget {
           child: DataTable(
             horizontalMargin: AppSpacing.s20,
             columnSpacing: AppSpacing.s24,
+            dataRowMinHeight: 64,
+            dataRowMaxHeight: 164,
             headingRowColor: const WidgetStatePropertyAll(AppColors.background),
             columns: const [
               DataColumn(
@@ -194,6 +245,10 @@ class _PackageList extends StatelessWidget {
                 label: Text('Added'),
                 columnWidth: FlexColumnWidth(1.8),
               ),
+              DataColumn(
+                label: Text('Draft'),
+                columnWidth: FlexColumnWidth(2.5),
+              ),
             ],
             rows: [
               for (final package in packages)
@@ -203,6 +258,13 @@ class _PackageList extends StatelessWidget {
                     DataCell(Text(_fileCount(package.fileIds.length))),
                     DataCell(_PackageStatus(status: package.status)),
                     DataCell(Text(_dateLabel(package.createdAt))),
+                    DataCell(
+                      SupplierSourceExtractionStatus(
+                        packageId: package.id,
+                        state: extractionState(package),
+                        onRequest: () => onRequestExtraction(package),
+                      ),
+                    ),
                   ],
                 ),
             ],
@@ -237,6 +299,20 @@ class _PackageList extends StatelessWidget {
                         ),
                       ],
                     ),
+                    if (packages[index].status ==
+                        SupplierSourcePackageStatus.uploaded) ...[
+                      const SizedBox(height: AppSpacing.s16),
+                      const Divider(height: 1),
+                      const SizedBox(height: AppSpacing.s12),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: SupplierSourceExtractionStatus(
+                          packageId: packages[index].id,
+                          state: extractionState(packages[index]),
+                          onRequest: () => onRequestExtraction(packages[index]),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
