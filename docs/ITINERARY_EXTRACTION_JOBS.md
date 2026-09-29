@@ -24,6 +24,63 @@ processing owns all later transitions.
 This contract stores no prompts, responses, source text, provider request IDs,
 or other provider details. No AI provider is selected by this model.
 
+## Format-agnostic semantic contract
+
+An extraction job processes one trusted Supplier Source Package; the supplier,
+layout and capture channel do not select a different itinerary schema. File
+uploads today and future pasted-text, email, WhatsApp or connector adapters must
+all converge on the shared Supplier Source boundary, semantic extraction,
+trusted normalization and the same `KayraItineraryDraft` contract. Future
+channel integrations are adapters, not separate extraction domains.
+
+The detailed current/target channel matrix and Source Package invariants are in
+[`SUPPLIER_SOURCE_UPLOAD_ENGINE.md`](SUPPLIER_SOURCE_UPLOAD_ENGINE.md). Direct
+email and WhatsApp ingestion are future capabilities and must not be treated as
+implemented by the current job pipeline.
+
+## Partial-source normalization
+
+Jobs may complete with a trustworthy but incomplete draft. The processor and
+provider must preserve supported facts, omit unsupported values and create
+review issues for important ambiguity. They must not invent dates, chronology,
+hotel continuity, service classifications or relationships merely to satisfy a
+complete itinerary shape.
+
+Explicit source day/date/service relationships are preserved. Undated or
+unassigned facts are not distributed across arbitrary days. Global facts keep
+their declared package-wide scope and are not copied onto every service unless
+the source explicitly makes that mapping.
+
+The current persisted draft has no first-class collection for unassigned
+services or package-level facts: services exist only within ordered days. When a
+fact cannot be mapped safely, a review issue can identify the problem but cannot
+fully preserve that structured fact. A future staging/import representation or
+consultant-mapping workflow is required. Until then, normalization must not
+fabricate a day or duplicate global content to work around the gap.
+
+Commercial pricing, supplier costs, margins, payment information and commercial
+terms remain outside the itinerary draft. An operational statement mixed with a
+price must be separated semantically: preserve the non-commercial fact in an
+appropriate supported domain, while excluding the monetary value. Flights and
+visa remain outside the current day-service draft rather than being forced into
+`other` services.
+
+## Quality policy and validation
+
+Extraction is optimized in this order: source fidelity, completeness, semantic
+structure, uncertainty handling, provenance, presentation compactness, then
+latency. A 20–30 second extraction is currently acceptable when it materially
+improves quality. This policy does not itself change provider-call count or
+runtime settings.
+
+Maturity requires the multi-supplier validation corpus defined in
+[`SUPPLIER_SOURCE_UPLOAD_ENGINE.md`](SUPPLIER_SOURCE_UPLOAD_ENGINE.md), including
+structured and narrative PDFs, tables, plain text, screenshots, global facts,
+incomplete chronology, mixed commercial content, multi-file packages and poor
+quality scans. Validation must detect missing facts, inventions,
+misclassification, chronology errors, uncertainty defects, provenance errors,
+commercial leakage and unnecessary duplication.
+
 ## Request callable
 
 `requestItineraryExtraction` is a second-generation callable in `asia-south2`.

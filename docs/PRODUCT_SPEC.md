@@ -105,30 +105,87 @@ One client may have multiple active trips.
 - Every new itinerary normally starts from supplier/vendor material
 - Client/trip must exist or be selected before supplier files are uploaded
 - Multiple supplier files may be uploaded together as one source package
+- Every item in one source package must come from the same supplier; use a
+  separate package for each additional supplier
 - Same trip may involve multiple suppliers
 - Supplier information is never shown in client-facing material
 - Supplier original content should remain stored for reference
-- System extracts/structures supplier material
+- System extracts supplier material semantically and normalizes supported facts
+  into one canonical itinerary draft model, regardless of source channel or
+  supplier layout
+- A partial source may produce an incomplete but trustworthy draft; the system
+  must not invent chronology, dates, hotel stays, classifications, or service
+  relationships to make it appear complete
+- Important missing or ambiguous structure must create Needs Review issues
 - Agent reviews/edits the draft
 - AI uncertain fields are marked Needs Review
 - Needs Review fields block Quote Prepared until resolved
 - Agent resolves using Accept Extracted Value or Edit Value
 - Corrections should be stored as structured extraction feedback
-- Extraction learning should support supplier-specific behavior
+- Extraction feedback may improve normalization, but must not create separate
+  supplier-specific parsers or itinerary domain models
 - AI use should remain minimal and focused on document extraction/structuring/matching
 - Do not add AI rewriting/polishing features by default
 
-## Supported Source Inputs
+## Supplier Source Inputs and Canonical Ingestion
 
-**Product-level ingestion must be designed to support:**
+Supplier format and ingestion channel must not determine the itinerary domain
+model. The target architecture is:
+
+```text
+PDF / image / CSV / text / pasted message / future connector
+    -> Supplier Source ingestion
+    -> semantic extraction
+    -> trusted normalization
+    -> one canonical Kayra itinerary draft model
+```
+
+**Current file-upload and production-extraction path:**
 
 - PDF
-- DOCX
-- XLSX/CSV
-- Images/screenshots
-- Pasted text
-- Email content
-- Multiple files
+- JPG, PNG and WebP images, including screenshots and scanned itineraries
+- TXT
+- CSV
+- Multiple same-supplier files in one source package
+
+DOC, DOCX, XLS and XLSX can currently be retained as Supplier Source files, but
+the production extraction adapter does not natively process them yet.
+
+**Near-term target:**
+
+- Pasted plain text, including copied email bodies, copied WhatsApp messages and
+  other supplier messages
+
+**Future convenience adapters:**
+
+- Direct email ingestion
+- WhatsApp ingestion/import
+- Other connectors
+
+Future adapters must create the same trusted Supplier Source representation and
+enter the same extraction and normalization pipeline. They must not introduce
+email-specific, WhatsApp-specific, or supplier-specific itinerary schemas.
+Direct email and WhatsApp integrations are not current capabilities.
+
+The detailed channel, partial-source, commercial-content, chronology and
+validation contracts are defined in
+[`SUPPLIER_SOURCE_UPLOAD_ENGINE.md`](SUPPLIER_SOURCE_UPLOAD_ENGINE.md).
+
+## Partial Sources and Commercial Separation
+
+A Supplier Source may contain only part of an itinerary. Preserve every
+supported fact that the canonical model can represent, leave unsupported facts
+unset, and raise Needs Review when important structure is missing or ambiguous.
+Never distribute undated services across invented days or duplicate a global
+fact across days merely to fit the current model.
+
+Supplier pricing, costs, margins, payment data and commercial terms remain
+outside the itinerary draft even when mixed with itinerary content. The
+underlying non-commercial semantic fact must still survive where the relevant
+domain supports it. For example, “Visa included — USD 30 per person” separates
+into an inclusion fact for a future appropriate itinerary/ancillary domain and
+commercial pricing outside the itinerary draft. The amount must never leak into
+client itinerary content.
 
 ## Supplier Master
 
