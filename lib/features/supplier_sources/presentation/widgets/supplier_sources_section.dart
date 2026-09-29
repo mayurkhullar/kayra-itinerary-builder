@@ -246,7 +246,7 @@ class _PackageList extends StatelessWidget {
                 columnWidth: FlexColumnWidth(1.8),
               ),
               DataColumn(
-                label: Text('Draft'),
+                label: Text('Extraction'),
                 columnWidth: FlexColumnWidth(2.5),
               ),
             ],

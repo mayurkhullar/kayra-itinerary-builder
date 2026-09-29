@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
+import '../../../itineraries/domain/kayra_itinerary_extraction_job.dart';
 import '../../../itineraries/presentation/controllers/itinerary_extraction_controller.dart';
 
 class SupplierSourceExtractionStatus extends StatelessWidget {
@@ -18,15 +19,32 @@ class SupplierSourceExtractionStatus extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final completedResultIsValid = switch (state.resultType) {
+      KayraItineraryExtractionResultType.itineraryDraft =>
+        state.resultingDraftId != null &&
+            state.resultingDraftId!.trim().isNotEmpty &&
+            state.resultingExtractionId == null,
+      KayraItineraryExtractionResultType.supplierExtraction =>
+        state.resultingExtractionId != null &&
+            state.resultingExtractionId!.trim().isNotEmpty &&
+            state.resultingDraftId == null,
+    };
     final effectiveState =
         state.kind == ItineraryExtractionPackageStateKind.completed &&
-            (state.resultingDraftId == null ||
-                state.resultingDraftId!.trim().isEmpty)
-        ? const ItineraryExtractionPackageState(
+            !completedResultIsValid
+        ? ItineraryExtractionPackageState(
             kind: ItineraryExtractionPackageStateKind.error,
-            message: 'We couldn’t build the itinerary draft. Please try again.',
+            resultType: state.resultType,
+            message:
+                state.resultType ==
+                    KayraItineraryExtractionResultType.itineraryDraft
+                ? 'We couldn’t build the itinerary draft. Please try again.'
+                : 'We couldn’t complete the supplier extraction. Please try again.',
           )
         : state;
+    final isSupplierExtraction =
+        effectiveState.resultType ==
+        KayraItineraryExtractionResultType.supplierExtraction;
     return Semantics(
       liveRegion: true,
       container: true,
@@ -50,16 +68,27 @@ class SupplierSourceExtractionStatus extends StatelessWidget {
           ),
           label: const Text('Starting draft…'),
         ),
-        ItineraryExtractionPackageStateKind.queued => const _BusyStatus(
-          label: 'Preparing draft…',
+        ItineraryExtractionPackageStateKind.queued => _BusyStatus(
+          label: isSupplierExtraction
+              ? 'Preparing extraction…'
+              : 'Preparing draft…',
         ),
-        ItineraryExtractionPackageStateKind.processing => const _BusyStatus(
-          label: 'Building itinerary draft…',
+        ItineraryExtractionPackageStateKind.processing => _BusyStatus(
+          label: isSupplierExtraction
+              ? 'Reading supplier itinerary…'
+              : 'Building itinerary draft…',
         ),
-        ItineraryExtractionPackageStateKind.completed => const _SuccessStatus(),
+        ItineraryExtractionPackageStateKind.completed => _SuccessStatus(
+          label: isSupplierExtraction
+              ? 'Extraction ready for review'
+              : 'Draft ready',
+        ),
         ItineraryExtractionPackageStateKind.failed ||
         ItineraryExtractionPackageStateKind.error => _FailureStatus(
           packageId: packageId,
+          title: isSupplierExtraction
+              ? 'Couldn’t extract itinerary'
+              : 'Couldn’t build draft',
           message:
               effectiveState.message ??
               'We couldn’t build the itinerary draft. Please try again.',
@@ -92,7 +121,9 @@ class _BusyStatus extends StatelessWidget {
 }
 
 class _SuccessStatus extends StatelessWidget {
-  const _SuccessStatus();
+  const _SuccessStatus({required this.label});
+
+  final String label;
 
   @override
   Widget build(BuildContext context) => Row(
@@ -100,7 +131,9 @@ class _SuccessStatus extends StatelessWidget {
     children: [
       const Icon(Icons.check_circle_outline_rounded, size: 18),
       const SizedBox(width: AppSpacing.s8),
-      Text('Draft ready', style: Theme.of(context).textTheme.labelLarge),
+      Flexible(
+        child: Text(label, style: Theme.of(context).textTheme.labelLarge),
+      ),
     ],
   );
 }
@@ -108,11 +141,13 @@ class _SuccessStatus extends StatelessWidget {
 class _FailureStatus extends StatelessWidget {
   const _FailureStatus({
     required this.packageId,
+    required this.title,
     required this.message,
     required this.onRetry,
   });
 
   final String packageId;
+  final String title;
   final String message;
   final VoidCallback onRetry;
 
@@ -124,7 +159,7 @@ class _FailureStatus extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Couldn’t build draft',
+          title,
           style: Theme.of(
             context,
           ).textTheme.labelLarge?.copyWith(color: AppColors.textPrimary),

@@ -180,6 +180,20 @@ final class FirestoreItineraryExtractionJobRepository
         from: current.status,
         to: to,
       );
+      KayraItineraryExtractionJob(
+        id: current.id,
+        tripId: current.tripId,
+        sourcePackageId: current.sourcePackageId,
+        status: to,
+        requestedByUid: current.requestedByUid,
+        extractionContractVersion: current.extractionContractVersion,
+        resultType: current.resultType,
+        persistenceShape: current.persistenceShape,
+        resultingDraftId: resultingDraftId,
+        failureCode: failureCode,
+        createdAt: current.createdAt,
+        updatedAt: current.updatedAt,
+      );
       transaction.update(reference, {
         'status': to.value,
         'resultingDraftId': resultingDraftId,

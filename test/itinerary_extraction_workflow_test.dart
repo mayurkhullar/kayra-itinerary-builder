@@ -162,6 +162,52 @@ void main() {
     });
   }
 
+  for (final entry in <KayraItineraryExtractionStatus, String>{
+    KayraItineraryExtractionStatus.queued: 'Preparing extraction…',
+    KayraItineraryExtractionStatus.processing: 'Reading supplier itinerary…',
+  }.entries) {
+    testWidgets('V3 ${entry.key.value} renders ${entry.value}', (tester) async {
+      sources.packages.add(_package());
+      jobs.jobs.add(
+        fakeExtractionJob(
+          status: entry.key,
+          extractionContractVersion:
+              KayraItineraryExtractionContractVersion.supplierExtractionV1,
+          resultType: KayraItineraryExtractionResultType.supplierExtraction,
+          persistenceShape: KayraItineraryExtractionPersistenceShape.versioned,
+        ),
+      );
+      await showSection(tester);
+      expect(find.text(entry.value), findsOneWidget);
+      expect(find.textContaining('draft', findRichText: true), findsNothing);
+    });
+  }
+
+  testWidgets('completed V3 result is truthful and has no draft action', (
+    tester,
+  ) async {
+    sources.packages.add(_package());
+    jobs.jobs.add(
+      fakeExtractionJob(
+        status: KayraItineraryExtractionStatus.completed,
+        extractionContractVersion:
+            KayraItineraryExtractionContractVersion.supplierExtractionV1,
+        resultType: KayraItineraryExtractionResultType.supplierExtraction,
+        persistenceShape: KayraItineraryExtractionPersistenceShape.versioned,
+        resultingExtractionId: 'extraction-1',
+      ),
+    );
+    await showSection(tester);
+
+    expect(find.text('Extraction ready for review'), findsOneWidget);
+    expect(find.text('Draft ready'), findsNothing);
+    expect(find.text('Generate Draft'), findsNothing);
+    expect(find.text('Try Again'), findsNothing);
+    expect(find.byType(TextButton), findsNothing);
+    expect(find.byType(OutlinedButton), findsNothing);
+    expect(requests.calls, isEmpty);
+  });
+
   testWidgets('completed state without a draft ID never claims success', (
     tester,
   ) async {
@@ -287,6 +333,8 @@ void main() {
         'The extracted itinerary needs another attempt before it can be used.',
     KayraItineraryExtractionFailureCode.draftPersistenceFailed:
         'The itinerary was extracted but could not be saved. Please try again.',
+    KayraItineraryExtractionFailureCode.supplierExtractionPersistenceFailed:
+        'We couldn’t save the extracted itinerary. Please try again.',
   };
   for (final entry in failureMessages.entries) {
     test('${entry.key.value} has the documented safe message', () {
@@ -298,6 +346,34 @@ void main() {
       itineraryExtractionFailureMessage(null),
       'We couldn’t build the itinerary draft. Please try again.',
     );
+  });
+
+  testWidgets('V3 persistence failure stays sanitized and retryable', (
+    tester,
+  ) async {
+    sources.packages.add(_package());
+    jobs.jobs.add(
+      fakeExtractionJob(
+        status: KayraItineraryExtractionStatus.failed,
+        extractionContractVersion:
+            KayraItineraryExtractionContractVersion.supplierExtractionV1,
+        resultType: KayraItineraryExtractionResultType.supplierExtraction,
+        persistenceShape: KayraItineraryExtractionPersistenceShape.versioned,
+        failureCode: KayraItineraryExtractionFailureCode
+            .supplierExtractionPersistenceFailed,
+      ),
+    );
+    await showSection(tester);
+
+    expect(find.text('Couldn’t extract itinerary'), findsOneWidget);
+    expect(
+      find.text('We couldn’t save the extracted itinerary. Please try again.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('supplier_extraction'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('retry-draft-package-1')));
+    await tester.pump();
+    expect(requests.calls.single.sourcePackageId, 'package-1');
   });
 
   for (final width in <double>[390, 1440]) {

@@ -123,7 +123,14 @@ KayraItineraryExtractionJob fakeExtractionJob({
   String tripId = 'trip-1',
   String sourcePackageId = 'package-1',
   KayraItineraryExtractionStatus status = KayraItineraryExtractionStatus.queued,
+  KayraItineraryExtractionContractVersion extractionContractVersion =
+      KayraItineraryExtractionContractVersion.itineraryDraftV1,
+  KayraItineraryExtractionResultType resultType =
+      KayraItineraryExtractionResultType.itineraryDraft,
+  KayraItineraryExtractionPersistenceShape persistenceShape =
+      KayraItineraryExtractionPersistenceShape.legacy,
   String? resultingDraftId,
+  String? resultingExtractionId,
   KayraItineraryExtractionFailureCode? failureCode,
   DateTime? createdAt,
   DateTime? updatedAt,
@@ -133,7 +140,11 @@ KayraItineraryExtractionJob fakeExtractionJob({
   sourcePackageId: sourcePackageId,
   status: status,
   requestedByUid: 'agent-1',
+  extractionContractVersion: extractionContractVersion,
+  resultType: resultType,
+  persistenceShape: persistenceShape,
   resultingDraftId: resultingDraftId,
+  resultingExtractionId: resultingExtractionId,
   failureCode: failureCode,
   createdAt: createdAt ?? DateTime.utc(2026, 9, 28, 8),
   updatedAt: updatedAt ?? DateTime.utc(2026, 9, 28, 8),

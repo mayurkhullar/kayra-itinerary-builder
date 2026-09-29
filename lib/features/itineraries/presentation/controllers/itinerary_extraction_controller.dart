@@ -24,12 +24,16 @@ final class ItineraryExtractionPackageState {
   const ItineraryExtractionPackageState({
     required this.kind,
     this.message,
+    this.resultType = KayraItineraryExtractionResultType.itineraryDraft,
     this.resultingDraftId,
+    this.resultingExtractionId,
   });
 
   final ItineraryExtractionPackageStateKind kind;
   final String? message;
+  final KayraItineraryExtractionResultType resultType;
   final String? resultingDraftId;
+  final String? resultingExtractionId;
 }
 
 final class ItineraryExtractionController extends ChangeNotifier {
@@ -116,8 +120,10 @@ final class ItineraryExtractionController extends ChangeNotifier {
     if (job != null) {
       return _stateForStatus(
         job.status,
+        resultType: job.resultType,
         failureCode: job.failureCode,
         resultingDraftId: job.resultingDraftId,
+        resultingExtractionId: job.resultingExtractionId,
       );
     }
     if (!_loaded) {
@@ -196,33 +202,55 @@ final class ItineraryExtractionController extends ChangeNotifier {
 
   ItineraryExtractionPackageState _stateForStatus(
     KayraItineraryExtractionStatus status, {
+    KayraItineraryExtractionResultType resultType =
+        KayraItineraryExtractionResultType.itineraryDraft,
     KayraItineraryExtractionFailureCode? failureCode,
     String? resultingDraftId,
-  }) => switch (status) {
-    KayraItineraryExtractionStatus.queued =>
-      const ItineraryExtractionPackageState(
-        kind: ItineraryExtractionPackageStateKind.queued,
-      ),
-    KayraItineraryExtractionStatus.processing =>
-      const ItineraryExtractionPackageState(
-        kind: ItineraryExtractionPackageStateKind.processing,
-      ),
-    KayraItineraryExtractionStatus.completed =>
-      resultingDraftId == null || resultingDraftId.trim().isEmpty
-          ? const ItineraryExtractionPackageState(
-              kind: ItineraryExtractionPackageStateKind.error,
-              message:
-                  'We couldn’t build the itinerary draft. Please try again.',
-            )
-          : ItineraryExtractionPackageState(
-              kind: ItineraryExtractionPackageStateKind.completed,
-              resultingDraftId: resultingDraftId,
-            ),
-    KayraItineraryExtractionStatus.failed => ItineraryExtractionPackageState(
-      kind: ItineraryExtractionPackageStateKind.failed,
-      message: itineraryExtractionFailureMessage(failureCode),
-    ),
-  };
+    String? resultingExtractionId,
+  }) {
+    switch (status) {
+      case KayraItineraryExtractionStatus.queued:
+        return ItineraryExtractionPackageState(
+          kind: ItineraryExtractionPackageStateKind.queued,
+          resultType: resultType,
+        );
+      case KayraItineraryExtractionStatus.processing:
+        return ItineraryExtractionPackageState(
+          kind: ItineraryExtractionPackageStateKind.processing,
+          resultType: resultType,
+        );
+      case KayraItineraryExtractionStatus.completed:
+        final hasCompatibleResult = switch (resultType) {
+          KayraItineraryExtractionResultType.itineraryDraft =>
+            resultingDraftId != null &&
+                resultingDraftId.trim().isNotEmpty &&
+                resultingExtractionId == null,
+          KayraItineraryExtractionResultType.supplierExtraction =>
+            resultingExtractionId != null &&
+                resultingExtractionId.trim().isNotEmpty &&
+                resultingDraftId == null,
+        };
+        if (!hasCompatibleResult) {
+          return ItineraryExtractionPackageState(
+            kind: ItineraryExtractionPackageStateKind.error,
+            resultType: resultType,
+            message: 'We couldn’t build the itinerary draft. Please try again.',
+          );
+        }
+        return ItineraryExtractionPackageState(
+          kind: ItineraryExtractionPackageStateKind.completed,
+          resultType: resultType,
+          resultingDraftId: resultingDraftId,
+          resultingExtractionId: resultingExtractionId,
+        );
+      case KayraItineraryExtractionStatus.failed:
+        return ItineraryExtractionPackageState(
+          kind: ItineraryExtractionPackageStateKind.failed,
+          resultType: resultType,
+          message: itineraryExtractionFailureMessage(failureCode),
+        );
+    }
+  }
 
   bool _isCurrentLoad(int version) => !_disposed && version == _loadVersion;
 
@@ -267,5 +295,7 @@ String itineraryExtractionFailureMessage(
     'The extracted itinerary needs another attempt before it can be used.',
   KayraItineraryExtractionFailureCode.draftPersistenceFailed =>
     'The itinerary was extracted but could not be saved. Please try again.',
+  KayraItineraryExtractionFailureCode.supplierExtractionPersistenceFailed =>
+    'We couldn’t save the extracted itinerary. Please try again.',
   null => 'We couldn’t build the itinerary draft. Please try again.',
 };

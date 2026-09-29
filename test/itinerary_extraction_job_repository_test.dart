@@ -31,7 +31,13 @@ Map<String, dynamic> _record({
   String tripId = 'trip-1',
   String packageId = 'package-1',
   KayraItineraryExtractionStatus status = KayraItineraryExtractionStatus.queued,
+  bool versioned = false,
+  KayraItineraryExtractionContractVersion contractVersion =
+      KayraItineraryExtractionContractVersion.itineraryDraftV1,
+  KayraItineraryExtractionResultType resultType =
+      KayraItineraryExtractionResultType.itineraryDraft,
   String? resultingDraftId,
+  String? resultingExtractionId,
   KayraItineraryExtractionFailureCode? failureCode,
   DateTime? createdAt,
 }) => {
@@ -39,7 +45,10 @@ Map<String, dynamic> _record({
   'sourcePackageId': packageId,
   'status': status.value,
   'requestedByUid': 'agent-1',
+  if (versioned) 'extractionContractVersion': contractVersion.value,
+  if (versioned) 'resultType': resultType.value,
   'resultingDraftId': resultingDraftId,
+  if (versioned) 'resultingExtractionId': resultingExtractionId,
   'failureCode': failureCode?.value,
   'createdAt': Timestamp.fromDate(createdAt ?? _createdAt),
   'updatedAt': Timestamp.fromDate(_updatedAt),
@@ -161,6 +170,28 @@ void main() {
       expect(observed.last, isNull);
       expect(firestore.sets, isEmpty);
       expect(firestore.transactionUpdates, isEmpty);
+    },
+  );
+
+  test(
+    'repository deserializes a completed supplier extraction result',
+    () async {
+      firestore.documents['$_jobs/v3-completed'] = _record(
+        versioned: true,
+        contractVersion:
+            KayraItineraryExtractionContractVersion.supplierExtractionV1,
+        resultType: KayraItineraryExtractionResultType.supplierExtraction,
+        status: KayraItineraryExtractionStatus.completed,
+        resultingExtractionId: 'extraction-1',
+      );
+
+      final job = await repository.getJob('trip-1', 'v3-completed');
+      expect(
+        job!.resultType,
+        KayraItineraryExtractionResultType.supplierExtraction,
+      );
+      expect(job.resultingExtractionId, 'extraction-1');
+      expect(job.resultingDraftId, isNull);
     },
   );
 
