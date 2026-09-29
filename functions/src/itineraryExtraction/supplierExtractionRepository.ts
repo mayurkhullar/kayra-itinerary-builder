@@ -80,11 +80,20 @@ export interface SupplierExtractionRepositoryStore {
     records: SupplierExtractionPersistenceRecords,
     trustedPackage: TrustedSupplierSourcePackage,
   ): Promise<"completed" | "already_completed">;
+  inspectFinalization(
+    records: SupplierExtractionPersistenceRecords,
+    trustedPackage: TrustedSupplierSourcePackage,
+  ): Promise<SupplierExtractionFinalizationInspection>;
   readSnapshot(
     tripId: string,
     extractionId: string,
   ): Promise<SupplierExtractionPersistenceRecords | null>;
 }
+
+export type SupplierExtractionFinalizationInspection =
+  "complete_completed" |
+  "eligible_for_failure" |
+  "inconsistent";
 
 export interface SupplierExtractionWriteResult {
   extractionId: string;

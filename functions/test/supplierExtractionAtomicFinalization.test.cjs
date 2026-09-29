@@ -264,6 +264,47 @@ test('repeat after successful finalization is idempotent', async () => {
   assert.equal(f.db.records.get(jobPath).resultingExtractionId, jobId);
 });
 
+test('authoritative inspection identifies states eligible for failure', async () => {
+  const missing = fixture();
+  assert.equal(
+    await missing.store.inspectFinalization(
+      missing.records,
+      missing.trustedPackage,
+    ),
+    'eligible_for_failure',
+  );
+
+  const writing = fixture();
+  await beginAndWrite(writing);
+  assert.equal(
+    await writing.store.inspectFinalization(
+      writing.records,
+      writing.trustedPackage,
+    ),
+    'eligible_for_failure',
+  );
+});
+
+test('authoritative inspection proves coordinated completion', async () => {
+  const f = fixture();
+  await beginAndWrite(f);
+  await f.store.finalizeSnapshot(f.records, f.trustedPackage);
+  assert.equal(
+    await f.store.inspectFinalization(f.records, f.trustedPackage),
+    'complete_completed',
+  );
+});
+
+test('authoritative inspection rejects a split root/job state', async () => {
+  const f = fixture();
+  await beginAndWrite(f);
+  f.db.records.get(rootPath).persistenceState = 'complete';
+  assert.equal(
+    await f.store.inspectFinalization(f.records, f.trustedPackage),
+    'inconsistent',
+  );
+});
+
 test('complete Snapshot with processing job is an integrity error', async () => {
   const f = fixture();
   await beginAndWrite(f);

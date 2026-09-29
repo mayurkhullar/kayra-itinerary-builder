@@ -127,6 +127,17 @@ export function adminSupplierExtractionRepositoryStore(
       }
     },
 
+    async inspectFinalization(records, trustedPackage) {
+      try {
+        return await inspectSnapshotAndJob(db, records, trustedPackage);
+      } catch (error) {
+        if (error instanceof SupplierExtractionPersistenceError) {
+          return "inconsistent";
+        }
+        throw finalizationFailure();
+      }
+    },
+
     async readSnapshot(tripId, extractionId) {
       const rootReference = extractionDocument(db, tripId, extractionId);
       const rootSnapshot = await rootReference.get();
@@ -144,6 +155,53 @@ export function adminSupplierExtractionRepositoryStore(
       } as SupplierExtractionPersistenceRecords;
     },
   };
+}
+
+async function inspectSnapshotAndJob(
+  db: Firestore,
+  records: SupplierExtractionPersistenceRecords,
+  trustedPackage: TrustedSupplierSourcePackage,
+): Promise<"complete_completed" | "eligible_for_failure" | "inconsistent"> {
+  const expectedRoot = records.root;
+  const rootReference = extractionDocument(
+    db,
+    expectedRoot.tripId,
+    expectedRoot.extractionId,
+  );
+  const jobReference = extractionJobDocument(
+    db,
+    expectedRoot.tripId,
+    expectedRoot.jobId,
+  );
+  return db.runTransaction(async (transaction) => {
+    const currentPackage = await loadTrustedPackage(
+      db,
+      transaction,
+      expectedRoot.tripId,
+      expectedRoot.sourcePackageId,
+    );
+    requireSameTrustedPackage(trustedPackage, currentPackage);
+    const [rootSnapshot, jobSnapshot] = await transaction.getAll(
+      rootReference,
+      jobReference,
+    );
+    const job = storedExtractionJob(jobSnapshot);
+    if (!rootSnapshot.exists) {
+      requireProcessingSupplierJob(expectedRoot, job, jobReference.id);
+      return "eligible_for_failure";
+    }
+    const root = requireMatchingRoot(
+      rootSnapshot,
+      expectedRoot,
+      ["writing", "complete"],
+    );
+    if (root.persistenceState === "complete") {
+      requireCompletedPair(root, job, jobReference.id);
+      return "complete_completed";
+    }
+    requireProcessingSupplierJob(root, job, jobReference.id);
+    return "eligible_for_failure";
+  });
 }
 
 async function finalizeSnapshotAndJob(

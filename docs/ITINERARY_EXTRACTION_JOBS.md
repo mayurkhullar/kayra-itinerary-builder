@@ -399,11 +399,19 @@ already-completed job linked to the same complete extraction is success, while
 failure finalization may update only a job that is still processing. It must
 never overwrite a committed completion.
 
-The current snapshot repository promotes its root independently. V3 production
-composition must therefore split snapshot writing from final promotion rather
-than calling that standalone promotion and then updating the job. Cleanup or
-recovery for abandoned `writing` roots is an operational follow-up; such roots
-remain inaccessible and must not be treated as successful results.
+The snapshot repository exposes separate begin, child-write and coordinated
+finalization phases. An isolated V3 processor now composes those phases for
+strict `supplier_extraction_v1` jobs, but no production callable, trigger or
+V2.4 processor routes to it. A duplicate invocation that finds a job already in
+`processing` returns `already_processing` without another provider call; stale
+job lease/recovery remains a separate follow-up. Before recording a persistence
+failure after an ambiguous write, the processor re-reads the authoritative root
+and job pair. A valid completed pair is success, a verified writing/processing
+pair may be failed with `supplier_extraction_persistence_failed`, and an
+inconsistent or unverifiable pair is left unchanged for operational recovery.
+Cleanup or recovery for abandoned `writing` roots is also an operational
+follow-up; such roots remain inaccessible and must not be treated as successful
+results.
 
 This two-phase visibility protocol preserves all normalized source facts before
 review. Later canonical finalization follows the staging model's disposition
