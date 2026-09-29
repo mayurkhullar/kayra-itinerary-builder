@@ -579,6 +579,14 @@ The extraction job remains at its existing path and should eventually record a
 server-created `resultingExtractionId` for the staging-capable flow. Existing
 legacy jobs with `resultingDraftId` remain valid historical records.
 
+Snapshot persistence uses an internal root `persistenceState` of `writing` or
+`complete`. The backend creates the root as `writing`, creates immutable child
+documents in bounded batches, and promotes the root to `complete` only after
+all required children succeed. Trusted readers and client rules expose only
+`complete` snapshots. Each child document ID equals its backend-owned entity ID
+and stores a one-based `snapshotOrder` beside the entity value so reconstruction
+is deterministic without imposing a single-batch entity limit.
+
 The resolution header stores base extraction ID, status, revision, responsible
 consultant, timestamps and final draft ID after completion. Decisions point to
 trusted fact/issue IDs and final canonical field paths. Events are append-only.

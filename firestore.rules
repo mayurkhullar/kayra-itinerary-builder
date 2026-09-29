@@ -411,6 +411,42 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    function canReadSupplierExtraction(tripId, extractionId) {
+      let extractionPath = /databases/$(database)/documents/trips/$(tripId)/supplier_extractions/$(extractionId);
+      return canAccessTripItineraries(tripId)
+        && exists(extractionPath)
+        && get(extractionPath).data.persistenceState == 'complete';
+    }
+
+    match /trips/{tripId}/supplier_extractions/{extractionId} {
+      // A partially persisted machine snapshot remains invisible until the
+      // trusted backend promotes its internal state to complete.
+      allow get, list: if canAccessTripItineraries(tripId)
+        && resource.data.persistenceState == 'complete';
+      allow create, update, delete: if false;
+
+      match /days/{dayId} {
+        allow get, list: if canReadSupplierExtraction(tripId, extractionId);
+        allow create, update, delete: if false;
+      }
+
+      match /facts/{factId} {
+        allow get, list: if canReadSupplierExtraction(tripId, extractionId);
+        allow create, update, delete: if false;
+      }
+
+      match /review_issues/{issueId} {
+        allow get, list: if canReadSupplierExtraction(tripId, extractionId);
+        allow create, update, delete: if false;
+      }
+
+      // Reserved for a later consultant-resolution design. No client access
+      // is granted until that mutable boundary is implemented deliberately.
+      match /resolutions/{document=**} {
+        allow read, write: if false;
+      }
+    }
+
     match /trips/{tripId}/itinerary_extraction_jobs/{jobId} {
       allow get, list: if canAccessTripItineraries(tripId);
 
