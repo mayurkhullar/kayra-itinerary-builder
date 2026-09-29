@@ -226,3 +226,287 @@ The trigger runs in `asia-south2` with concurrency 1 and at most two instances,
 keeping parallel model spend deliberately bounded. Live Gemini access remains
 behind `ItineraryExtractionProvider` and uses the configured runtime service
 account through Application Default Credentials.
+
+## V3 staging-result job-contract migration
+
+The sections above describe the deployed V2.4 draft-producing contract. The V3
+pipeline changes the machine result into an immutable Supplier Extraction
+Snapshot that must be reviewed and resolved before a canonical itinerary draft
+is finalized. The extraction job still represents machine execution only. Its
+successful completion does not mean that consultant review or itinerary
+finalization is complete.
+
+The Supplier Extraction Snapshot, resolution and finalization boundaries are
+defined in
+[`SUPPLIER_EXTRACTION_STAGING_MODEL.md`](SUPPLIER_EXTRACTION_STAGING_MODEL.md).
+This section defines the additive job-document migration needed to link that
+model without rewriting historical V2.4 records.
+
+### Result discriminator and identifiers
+
+Add a server-owned `resultType` discriminator with exactly these values:
+
+- `itinerary_draft`: the machine job directly produced a canonical
+  `KayraItineraryDraft` under the deployed V2.4 contract.
+- `supplier_extraction`: the machine job produced a complete immutable Supplier
+  Extraction Snapshot for consultant review.
+
+Keep separate nullable result fields:
+
+- `resultingDraftId`
+- `resultingExtractionId`
+
+Separate fields make the result union explicit and keep a snapshot ID from being
+mistaken for a draft ID. A generic `resultId` would require every reader and
+write path to interpret the discriminator before it could even choose a
+collection, and would make accidental cross-type writes easier.
+
+Every newly created job stores both result fields. Queued and processing jobs
+store both as null. A failed job also stores both as null. A completed job stores
+exactly the identifier selected by `resultType` and keeps the other null. The
+backend must reject mixed or partial combinations, including both IDs, the wrong
+ID for the discriminator, an outcome on an unfinished job, a missing successful
+ID, or a successful ID on a failed job.
+
+Historical documents do not gain synthetic fields in Firestore. A strict reader
+recognizes two complete schemas rather than accepting arbitrary optional keys:
+
+1. A legacy field set has no `resultType`, `resultingExtractionId` or
+   `extractionContractVersion`. It is interpreted as `itinerary_draft` under the
+   effective legacy contract described below. Its existing status,
+   `resultingDraftId` and `failureCode` invariants continue to apply.
+2. A versioned field set contains all three new fields and must satisfy the new
+   discriminated-result invariants. A document containing only some of the new
+   fields is malformed.
+
+This inference is safe because no historical job can represent a Supplier
+Extraction Snapshot. It preserves completed V2.4 draft links without a
+destructive data migration.
+
+### Machine status and consultant review
+
+Keep the existing job states unchanged:
+
+```text
+queued -> processing -> completed
+queued -> processing -> failed
+```
+
+For either result type, `completed` means only that the machine job successfully
+persisted its declared result. It does not mean that a supplier extraction was
+reviewed, resolved or converted to canonical itinerary content.
+
+Consultant workflow belongs to the separate resolution aggregate described in
+the staging model. That aggregate owns states such as unresolved, in review,
+ready to finalize, finalized or superseded when those states are implemented.
+Finalization creates or updates canonical itinerary content and seals the
+resolution. It does not reopen or advance the terminal extraction job.
+
+### Server-owned extraction contract
+
+Add `extractionContractVersion` as server-owned product metadata. Recommended
+stable values are:
+
+- `itinerary_draft_v1` for the effective historical V2.4 job contract; legacy
+  documents infer this value in memory and are not rewritten.
+- `supplier_extraction_v1` for the first V3 staging-result job contract.
+
+The contract version selects the trusted processor/result pathway and is part
+of active-job deduplication. It is distinct from both of these values:
+
+- The Gemini prompt/provider version, such as
+  `kayra_itinerary_extraction_v3_staging`, records operational extraction
+  behavior. It belongs in trusted snapshot metadata and may change without
+  changing the job contract when the result semantics remain compatible.
+- The Supplier Extraction Snapshot schema version, currently
+  `supplier_extraction_snapshot_v1`, describes the persisted snapshot shape and
+  its reader/validator. It does not select a provider or determine job
+  deduplication by itself.
+
+A prompt revision does not require a new job contract merely because wording or
+model behavior changed. A result-shape or lifecycle change that makes active
+jobs incompatible requires a new `extractionContractVersion`.
+
+### Request cutover and deduplication
+
+The callable request remains exactly `tripId` plus `sourcePackageId`. The client
+must never send `resultType`, a provider name, prompt version or contract
+version. The callable assigns `resultType` and `extractionContractVersion` from
+one server-owned current-contract constant.
+
+Use this cutover sequence:
+
+1. Keep ordinary production requests on V2.4 while backward-compatible job
+   readers and a contract-aware processor are introduced.
+2. The processor interprets a legacy job as `itinerary_draft_v1` and routes it
+   only to the existing V2.4 draft path. It routes an explicit
+   `supplier_extraction_v1` job only to the V3 snapshot path.
+3. After V3 persistence, consultant resolution, deterministic finalization and
+   the review entry point can preserve every staged fact category, change the
+   callable's single server-owned current contract so all new requests create
+   `supplier_extraction` jobs.
+4. Keep the legacy reader and V2.4 processing route for historical active jobs
+   and records. They are compatibility paths, not user-selectable alternatives.
+
+An active-job deduplication identity is:
+
+```text
+sourcePackageId + extractionContractVersion
+```
+
+The result type must also be validated as the one required by that contract,
+but need not duplicate the dedup key. Prompt version is not part of the key.
+Only queued or processing jobs with the same effective contract qualify for
+deduplication. Completed and failed jobs permit a new attempt. Consequently, a
+historical V2.4 job does not prevent a V3 request after cutover, and a queued or
+processing legacy job is never returned as though it were a V3 job.
+
+The current source-package query can remain the authorization snapshot and the
+backend can filter its returned jobs by effective contract, avoiding a
+client-supplied selector. If a future query filters both fields in Firestore,
+its required index must be introduced deliberately.
+
+### V3 persistence and job-completion atomicity
+
+A Supplier Extraction Snapshot can exceed one Firestore batch, so all children
+and the job cannot be created in one transaction. Preserve the existing
+`writing`/`complete` visibility boundary and move final promotion into the job
+finalization boundary:
+
+1. Claim the matching V3 queued job as processing and reload the trusted source
+   package.
+2. Make exactly one V3 provider call, validate the DTO and trusted-normalize the
+   complete snapshot in memory.
+3. Use one backend-determined extraction ID for the job. Deriving it
+   deterministically from the job ID is the smallest way to make partial-write
+   recovery address the same root without putting a result ID on an unfinished
+   job.
+4. Create the snapshot root as `writing`, then create all immutable children in
+   bounded batches. A partial root remains unreadable to trusted readers and
+   Firestore clients.
+5. After every required child write succeeds, run one Firestore transaction
+   that revalidates the still-processing job, its contract/result type and the
+   writing root. In that transaction, promote the root to `complete` and update
+   the job to `completed` with `resultingExtractionId`; keep
+   `resultingDraftId` and `failureCode` null.
+
+The last transaction makes a complete readable snapshot and its completed job
+link visible together. It prevents both a completed V3 job pointing at a
+writing snapshot and an unlinked complete snapshot. A failure before that
+transaction leaves only an invisible `writing` root. If the final transaction's
+acknowledgement is ambiguous, the processor must reload the job and root: an
+already-completed job linked to the same complete extraction is success, while
+failure finalization may update only a job that is still processing. It must
+never overwrite a committed completion.
+
+The current snapshot repository promotes its root independently. V3 production
+composition must therefore split snapshot writing from final promotion rather
+than calling that standalone promotion and then updating the job. Cleanup or
+recovery for abandoned `writing` roots is an operational follow-up; such roots
+remain inaccessible and must not be treated as successful results.
+
+This two-phase visibility protocol preserves all normalized source facts before
+review. Later canonical finalization follows the staging model's disposition
+invariant and is independent of extraction-job completion.
+
+### Failure-code compatibility
+
+Keep all historical failure codes readable. The existing
+`draft_persistence_failed` remains valid for `itinerary_draft` jobs and is not
+renamed in stored history.
+
+Add `supplier_extraction_persistence_failed` for a V3 job whose validated
+snapshot cannot be fully persisted and atomically linked. The existing
+`source_unavailable`, `unsupported_source`, `extraction_failed` and
+`invalid_extraction_result` codes remain meaningful for both contracts. A V3
+job must not record `draft_persistence_failed`, because extraction no longer
+creates a draft, and a draft-producing job must not record the new snapshot
+failure code.
+
+Raw provider or persistence errors remain absent from job documents.
+
+### Flutter compatibility boundary
+
+The later Flutter migration needs a strict result union, not a new consultant
+workflow in the job model. It must:
+
+- read the exact legacy field set and infer `itinerary_draft_v1` plus
+  `itinerary_draft`;
+- read the exact versioned field set, including `resultType`,
+  `extractionContractVersion` and `resultingExtractionId`;
+- reject invalid status/result/failure combinations;
+- render a completed draft result as **Draft ready** and retain its canonical
+  draft destination; and
+- render a completed supplier-extraction result as **Extraction ready for
+  review** and route it to the future Supplier Import review entry point.
+
+Queued and processing copy may stay machine-oriented. The UI must not infer a
+draft from `completed` alone. The callable request payload remains unchanged,
+and Flutter never selects a provider or contract version.
+
+### Firestore Rules impact
+
+No extraction-job Rules schema change is required for these metadata fields.
+Current Rules grant owner/Admin reads through the parent Trip and deny all
+client creates, updates and deletes, so the Admin SDK remains the only writer.
+The existing Supplier Extraction rules already expose only `complete` roots and
+their machine-owned children under the same owner/Admin boundary. Any future
+resolution-write rules remain a separate, deliberate change.
+
+### Backward-compatibility matrix
+
+| Record | Effective interpretation | Required outcome |
+|---|---|---|
+| Historical V2.4 `queued` | Missing new fields implies `itinerary_draft_v1` / `itinerary_draft`. | `resultingDraftId` and `failureCode` are null. |
+| Historical V2.4 `processing` | Same legacy inference; eligible only for the legacy processor route. | `resultingDraftId` and `failureCode` are null. |
+| Historical V2.4 `failed` | Same legacy inference and terminal machine failure. | `resultingDraftId` is null and the historical failure code is valid. |
+| Historical V2.4 `completed` | Same legacy inference and canonical draft result. | Valid `resultingDraftId`; `failureCode` is null. |
+| New V3 `queued` | Explicit `supplier_extraction_v1` / `supplier_extraction`. | Both result IDs and `failureCode` are null. |
+| New V3 `processing` | Same explicit V3 contract; only the V3 processor route may claim it. | Both result IDs and `failureCode` are null. |
+| New V3 `failed` | Terminal machine failure; consultant review never starts. | Both result IDs are null and the failure code is valid for V3. |
+| New V3 `completed` | Complete immutable snapshot ready for review. | Valid `resultingExtractionId`; `resultingDraftId` and `failureCode` are null; referenced root is `complete`. |
+
+Reject every other combination. This includes partial presence of new fields,
+unknown result or contract values, a contract/result mismatch, either result ID
+on queued/processing/failed jobs, no matching result ID on completed jobs, both
+IDs, a failure code on completed jobs, or legacy documents whose existing
+status/outcome invariants do not hold.
+
+### Stale active jobs
+
+Contract-aware deduplication prevents an old active V2.4 job from being returned
+as the result of a V3 request. It does not solve a queued or processing job that
+is stale within the same contract; that job would still deduplicate forever.
+
+Stale-job recovery remains a separate required follow-up. It should use a
+server-owned lease/age policy and an auditable terminalization or recovery path,
+never a client-controlled bypass. Deterministic extraction identity and the
+`writing` visibility state keep a future V3 recovery from creating multiple
+visible snapshots, but they do not by themselves authorize reclaiming a
+processing job or making another model call.
+
+### Recommended implementation checkpoints
+
+1. Extend TypeScript and Dart job readers with the strict legacy/versioned
+   union, result invariants, `extractionContractVersion`, the new result ID and
+   V3 persistence failure code. Keep production job creation on V2.4.
+2. Extend backend job-store tests for both schemas, contract-aware claims,
+   result-specific completion methods and rejection of every mixed state.
+3. Refactor Supplier Extraction persistence into `writing`, child-write and
+   final-promotion phases. Add failure, ambiguous-commit and abandoned-writing
+   tests without wiring the production trigger.
+4. Add a V3 processor composition that uses the existing trusted source reader,
+   standalone V3 provider and trusted normalizer, then atomically promotes the
+   snapshot and completes the job. Keep the V2.4 route unchanged.
+5. Deploy the dual-contract processor/trigger while the callable still creates
+   legacy V2.4 jobs. Verify historical queued, processing, failed and completed
+   records remain readable and route correctly.
+6. Update the Flutter reader/controller/status presentation so legacy draft
+   results and V3 review results are distinguished truthfully. The full review
+   workspace remains a later feature.
+7. Implement consultant resolution, deterministic finalization and its review
+   entry point under the staging model. Verify every staged fact receives a
+   valid disposition before canonical output can be created.
+8. Change the callable's single server-owned current contract to V3 and make
+   active deduplication contract-aware. Do not add a client version selector.
+9. Add stale active-job recovery as its own audited backend task.
