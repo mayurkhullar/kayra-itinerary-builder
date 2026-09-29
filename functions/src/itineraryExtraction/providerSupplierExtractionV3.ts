@@ -13,6 +13,9 @@ import {
   normalizeSupplierExtractionSnapshot,
   SupplierExtractionNormalizationContext,
 } from "./supplierExtractionValidation";
+import {
+  TrustedSupplierSourcePackage,
+} from "./sourceReaderValidation";
 
 export const supplierExtractionV3ProviderVersion =
   "kayra_itinerary_extraction_v3_staging" as const;
@@ -199,6 +202,27 @@ export type SupplierExtractionV3NormalizationContext = Omit<
 >;
 
 /**
+ * Strictly validates a parsed provider response without assigning trusted
+ * application metadata or persisting it. The returned DTO retains the sparse
+ * provider shape and is deeply frozen.
+ */
+export function validateProviderSupplierExtractionV3(
+  input: unknown,
+  trustedPackage: TrustedSupplierSourcePackage,
+): ProviderSupplierExtractionV3 {
+  normalizeProviderSupplierExtractionV3(input, {
+    extractionId: "provider-validation",
+    tripId: trustedPackage.tripId,
+    sourcePackageId: trustedPackage.packageId,
+    jobId: "provider-validation",
+    requestedByUid: "provider-validation",
+    createdAt: new Date(0),
+    trustedPackage,
+  });
+  return deepFreezeProviderDto(input as ProviderSupplierExtractionV3);
+}
+
+/**
  * Converts an untrusted V3 provider response into the trusted immutable
  * Supplier Extraction Snapshot domain. The provider version and every trusted
  * identity come from this backend boundary, never from provider output.
@@ -227,4 +251,14 @@ function withBackendTitleFallback(input: unknown): unknown {
       basis: "neutral_supported",
     },
   };
+}
+
+function deepFreezeProviderDto<T>(value: T): T {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    for (const nested of Object.values(value as Record<string, unknown>)) {
+      deepFreezeProviderDto(nested);
+    }
+    Object.freeze(value);
+  }
+  return value;
 }
