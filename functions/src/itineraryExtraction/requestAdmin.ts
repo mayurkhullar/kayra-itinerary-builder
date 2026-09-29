@@ -1,4 +1,12 @@
-import {FieldValue, Firestore} from "firebase-admin/firestore";
+import {FieldValue, Firestore, Timestamp} from "firebase-admin/firestore";
+import {
+  ExtractionContractVersion,
+  itineraryDraftExtractionContractVersion,
+  legacyQueuedExtractionJobData,
+  parseExtractionJobRecord,
+  resultTypeForExtractionContract,
+  versionedQueuedExtractionJobData,
+} from "./extractionJob";
 import {ExtractionRequestDependencies} from "./request";
 import {
   ExtractionRequestContext,
@@ -6,9 +14,28 @@ import {
   requireExtractionContext,
 } from "./requestValidation";
 
+export const currentProductionExtractionContractVersion =
+  itineraryDraftExtractionContractVersion;
+
+export interface AdminExtractionRequestOptions {
+  extractionContractVersion?: ExtractionContractVersion;
+  persistVersionedContractMetadata?: boolean;
+}
+
 export function adminExtractionRequestDependencies(
   db: Firestore,
+  options: AdminExtractionRequestOptions = {},
 ): ExtractionRequestDependencies {
+  const extractionContractVersion = options.extractionContractVersion ??
+    currentProductionExtractionContractVersion;
+  const persistVersionedContractMetadata =
+    options.persistVersionedContractMetadata ??
+    extractionContractVersion !== itineraryDraftExtractionContractVersion;
+  resultTypeForExtractionContract(extractionContractVersion);
+  if (!persistVersionedContractMetadata &&
+      extractionContractVersion !== itineraryDraftExtractionContractVersion) {
+    throw new Error("Only the legacy draft contract may omit metadata.");
+  }
   return {
     requestJob: (uid, input) => db.runTransaction(async (transaction) => {
       const trip = db.doc(`trips/${input.tripId}`);
@@ -32,19 +59,30 @@ export function adminExtractionRequestDependencies(
         jobs.where("sourcePackageId", "==", input.sourcePackageId),
       );
       const active = attempts.docs.find((snapshot) => {
-        const status = snapshot.data().status;
-        return status === "queued" || status === "processing";
+        const job = parseExtractionJobRecord(snapshot.data(), {
+          isTimestamp: (value) => value instanceof Timestamp,
+        });
+        return job.extractionContractVersion === extractionContractVersion &&
+          (job.status === "queued" || job.status === "processing");
       });
       if (active) {
+        const activeJob = parseExtractionJobRecord(active.data(), {
+          isTimestamp: (value) => value instanceof Timestamp,
+        });
         return {
           jobId: active.id,
-          status: active.data().status as "queued" | "processing",
+          status: activeJob.status as "queued" | "processing",
           createdNew: false,
         };
       }
 
       const job = jobs.doc();
-      transaction.create(job, queuedJobData(input, uid));
+      transaction.create(job, queuedJobData(
+        input,
+        uid,
+        extractionContractVersion,
+        persistVersionedContractMetadata,
+      ));
       return {jobId: job.id, status: "queued", createdNew: true};
     }),
   };
@@ -53,15 +91,18 @@ export function adminExtractionRequestDependencies(
 function queuedJobData(
   input: ExtractionRequestInput,
   uid: string,
+  extractionContractVersion: ExtractionContractVersion,
+  persistVersionedContractMetadata: boolean,
 ): Record<string, unknown> {
-  return {
+  const timestamps = FieldValue.serverTimestamp();
+  const queued = {
     tripId: input.tripId,
     sourcePackageId: input.sourcePackageId,
-    status: "queued",
     requestedByUid: uid,
-    resultingDraftId: null,
-    failureCode: null,
-    createdAt: FieldValue.serverTimestamp(),
-    updatedAt: FieldValue.serverTimestamp(),
+    createdAt: timestamps,
+    updatedAt: timestamps,
   };
+  return persistVersionedContractMetadata ?
+    versionedQueuedExtractionJobData(queued, extractionContractVersion) :
+    legacyQueuedExtractionJobData(queued);
 }

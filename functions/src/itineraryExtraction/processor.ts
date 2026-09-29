@@ -11,25 +11,31 @@ import {
   TrustedSupplierSourcePackage,
   validSourceIdentity,
 } from "./sourceReaderValidation";
+import {
+  ExtractionContractVersion,
+  ExtractionJobFailureCode,
+  ExtractionJobPersistenceShape,
+  ExtractionJobResultType,
+  itineraryDraftExtractionContractVersion,
+} from "./extractionJob";
 
-export type ExtractionJobFailureCode =
-  "source_unavailable" |
-  "unsupported_source" |
-  "extraction_failed" |
-  "invalid_extraction_result" |
-  "draft_persistence_failed";
+export type {ExtractionJobFailureCode} from "./extractionJob";
 
 export interface ClaimedExtractionJob {
   jobId: string;
   tripId: string;
   sourcePackageId: string;
   requestedByUid: string;
+  extractionContractVersion: ExtractionContractVersion;
+  resultType: ExtractionJobResultType;
+  persistenceShape: ExtractionJobPersistenceShape;
 }
 
 export interface ExtractionJobStore {
   claimQueuedJob(
     tripId: string,
     jobId: string,
+    extractionContractVersion: ExtractionContractVersion,
   ): Promise<ClaimedExtractionJob>;
   markJobFailed(
     job: ClaimedExtractionJob,
@@ -296,7 +302,11 @@ async function claimJob(
   jobs: ExtractionJobStore,
 ): Promise<ClaimedExtractionJob> {
   try {
-    return await jobs.claimQueuedJob(input.tripId, input.jobId);
+    return await jobs.claimQueuedJob(
+      input.tripId,
+      input.jobId,
+      itineraryDraftExtractionContractVersion,
+    );
   } catch (error) {
     if (error instanceof ItineraryExtractionProcessorError) throw error;
     throw new ItineraryExtractionProcessorError(

@@ -298,6 +298,20 @@ test('missing job is unavailable and causes no processing side effects', async (
   assert.equal(f.admin.updates.length, 0);
 });
 
+test('production V2.4 processor does not claim a Supplier Extraction job',
+  async () => {
+    const f = processorFixture({job: queuedJob({
+      extractionContractVersion: 'supplier_extraction_v1',
+      resultType: 'supplier_extraction',
+      resultingExtractionId: null,
+    })});
+    await assert.rejects(f.run(), processorCode('JOB_NOT_PROCESSABLE'));
+    assert.equal(f.admin.records.get(jobPath).status, 'queued');
+    assert.equal(f.providerCalls.length, 0);
+    assert.equal(f.admin.creates.length, 0);
+    assert.equal(f.admin.updates.length, 0);
+  });
+
 for (const status of ['processing', 'completed', 'failed']) {
   test(`${status} job cannot be reclaimed`, async () => {
     const outcome = status === 'completed' ? {

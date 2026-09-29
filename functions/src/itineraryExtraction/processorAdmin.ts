@@ -6,28 +6,23 @@ import {
 import {DraftCreateData} from "./draftWriter";
 import {draftWithServerTimestamps} from "./draftWriterAdmin";
 import {
+  completedDraftJobUpdate,
+  completedSupplierExtractionJobUpdate,
+  ExtractionJobRecord,
+  failedExtractionJobUpdate,
+  parseExtractionJobRecord,
+  processingExtractionJobUpdate,
+} from "./extractionJob";
+import {
   ClaimedExtractionJob,
   ExtractionJobStore,
   ItineraryExtractionProcessorError,
 } from "./processor";
 import {validSourceIdentity} from "./sourceReaderValidation";
 
-const jobFields = [
-  "tripId",
-  "sourcePackageId",
-  "status",
-  "requestedByUid",
-  "resultingDraftId",
-  "failureCode",
-  "createdAt",
-  "updatedAt",
-] as const;
-
-type JobRecord = Record<(typeof jobFields)[number], unknown>;
-
 export function adminExtractionJobStore(db: Firestore): ExtractionJobStore {
   return {
-    async claimQueuedJob(tripId, jobId) {
+    async claimQueuedJob(tripId, jobId, extractionContractVersion) {
       const jobReference = jobDocument(db, tripId, jobId);
       return db.runTransaction(async (transaction) => {
         const snapshot = await transaction.get(jobReference);
@@ -37,11 +32,14 @@ export function adminExtractionJobStore(db: Firestore): ExtractionJobStore {
             "Itinerary extraction job does not exist.",
           );
         }
-        const job = requireQueuedJob(snapshot.data(), tripId, jobId);
+        const {job, record} = requireQueuedJob(
+          snapshot.data(),
+          tripId,
+          jobId,
+          extractionContractVersion,
+        );
         transaction.update(jobReference, {
-          status: "processing",
-          resultingDraftId: null,
-          failureCode: null,
+          ...processingExtractionJobUpdate(record),
           updatedAt: FieldValue.serverTimestamp(),
         });
         return job;
@@ -52,11 +50,13 @@ export function adminExtractionJobStore(db: Firestore): ExtractionJobStore {
       const jobReference = jobDocument(db, job.tripId, job.jobId);
       await db.runTransaction(async (transaction) => {
         const snapshot = await transaction.get(jobReference);
-        requireProcessingJob(snapshot.data(), snapshot.exists, job);
+        const record = requireProcessingJob(
+          snapshot.data(),
+          snapshot.exists,
+          job,
+        );
         transaction.update(jobReference, {
-          status: "failed",
-          resultingDraftId: null,
-          failureCode,
+          ...failedExtractionJobUpdate(record, failureCode),
           updatedAt: FieldValue.serverTimestamp(),
         });
       });
@@ -74,16 +74,18 @@ export function adminExtractionJobStore(db: Firestore): ExtractionJobStore {
         if (!tripSnapshot.exists) {
           throw new Error("Parent Trip is unavailable.");
         }
-        requireProcessingJob(jobSnapshot.data(), jobSnapshot.exists, job);
+        const record = requireProcessingJob(
+          jobSnapshot.data(),
+          jobSnapshot.exists,
+          job,
+        );
         requireDraftIdentity(draftData, job);
         transaction.create(
           draftReference,
           draftWithServerTimestamps(draftData),
         );
         transaction.update(jobReference, {
-          status: "completed",
-          resultingDraftId: draftReference.id,
-          failureCode: null,
+          ...completedDraftJobUpdate(record, draftReference.id),
           updatedAt: FieldValue.serverTimestamp(),
         });
         return draftReference.id;
@@ -106,41 +108,46 @@ function requireQueuedJob(
   value: unknown,
   tripId: string,
   jobId: string,
-): ClaimedExtractionJob {
-  const data = exactJobRecord(value);
-  if (data.status !== "queued") {
+  extractionContractVersion: ClaimedExtractionJob[
+    "extractionContractVersion"
+  ],
+): {job: ClaimedExtractionJob; record: ExtractionJobRecord} {
+  const record = jobRecord(value);
+  if (record.status !== "queued" ||
+      record.extractionContractVersion !== extractionContractVersion) {
     throw notProcessable();
   }
-  requireUnfinishedOutcome(data);
-  return claimedJob(data, tripId, jobId);
+  return {job: claimedJob(record, tripId, jobId), record};
 }
 
 function requireProcessingJob(
   value: unknown,
   exists: boolean,
   expected: ClaimedExtractionJob,
-): void {
+): ExtractionJobRecord {
   if (!exists) throw notProcessable();
-  const data = exactJobRecord(value);
-  if (data.status !== "processing") throw notProcessable();
-  requireUnfinishedOutcome(data);
-  const actual = claimedJob(data, expected.tripId, expected.jobId);
+  const record = jobRecord(value);
+  if (record.status !== "processing") throw notProcessable();
+  const actual = claimedJob(record, expected.tripId, expected.jobId);
   if (actual.sourcePackageId !== expected.sourcePackageId ||
-      actual.requestedByUid !== expected.requestedByUid) {
+      actual.requestedByUid !== expected.requestedByUid ||
+      actual.extractionContractVersion !==
+        expected.extractionContractVersion ||
+      actual.resultType !== expected.resultType ||
+      actual.persistenceShape !== expected.persistenceShape) {
     throw notProcessable();
   }
+  return record;
 }
 
 function claimedJob(
-  data: JobRecord,
+  data: ExtractionJobRecord,
   tripId: string,
   jobId: string,
 ): ClaimedExtractionJob {
   if (data.tripId !== tripId ||
       !validSourceIdentity(data.sourcePackageId) ||
-      !validSourceIdentity(data.requestedByUid) ||
-      !(data.createdAt instanceof Timestamp) ||
-      !(data.updatedAt instanceof Timestamp)) {
+      !validSourceIdentity(data.requestedByUid)) {
     throw notProcessable();
   }
   return Object.freeze({
@@ -148,24 +155,18 @@ function claimedJob(
     tripId,
     sourcePackageId: data.sourcePackageId,
     requestedByUid: data.requestedByUid,
+    extractionContractVersion: data.extractionContractVersion,
+    resultType: data.resultType,
+    persistenceShape: data.persistenceShape,
   });
 }
 
-function exactJobRecord(value: unknown): JobRecord {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw notProcessable();
-  }
-  const data = value as Record<string, unknown>;
-  if (Object.keys(data).length !== jobFields.length ||
-      !jobFields.every((field) =>
-        Object.prototype.hasOwnProperty.call(data, field))) {
-    throw notProcessable();
-  }
-  return data as JobRecord;
-}
-
-function requireUnfinishedOutcome(data: JobRecord): void {
-  if (data.resultingDraftId !== null || data.failureCode !== null) {
+function jobRecord(value: unknown): ExtractionJobRecord {
+  try {
+    return parseExtractionJobRecord(value, {
+      isTimestamp: (timestamp) => timestamp instanceof Timestamp,
+    });
+  } catch (_) {
     throw notProcessable();
   }
 }
@@ -187,4 +188,15 @@ function notProcessable(): ItineraryExtractionProcessorError {
     "JOB_NOT_PROCESSABLE",
     "Itinerary extraction job is not processable.",
   );
+}
+
+/**
+ * Builds the strict job update for the future Supplier Extraction final
+ * transaction. It performs no Firestore write and is not used by production.
+ */
+export function supplierExtractionCompletionUpdate(
+  job: ExtractionJobRecord,
+  resultingExtractionId: string,
+): Record<string, unknown> {
+  return completedSupplierExtractionJobUpdate(job, resultingExtractionId);
 }

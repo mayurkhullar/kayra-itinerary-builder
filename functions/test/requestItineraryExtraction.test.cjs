@@ -1,6 +1,6 @@
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
-const {FieldValue} = require('firebase-admin/firestore');
+const {FieldValue, Timestamp} = require('firebase-admin/firestore');
 const {HttpsError} = require('firebase-functions/v2/https');
 const {
   parseExtractionRequestInput,
@@ -10,7 +10,12 @@ const {
 const {requestExtraction} = require('../lib/itineraryExtraction/request');
 const {
   adminExtractionRequestDependencies,
+  currentProductionExtractionContractVersion,
 } = require('../lib/itineraryExtraction/requestAdmin');
+const {
+  itineraryDraftExtractionContractVersion,
+  supplierExtractionContractVersion,
+} = require('../lib/itineraryExtraction/extractionJob');
 
 const input = {tripId: 'trip-1', sourcePackageId: 'package-1'};
 const auth = {uid: 'agent-1', token: {email: 'Agent-1@kholidaymaps.com'}};
@@ -31,7 +36,7 @@ function context() {
   };
 }
 
-function fixture() {
+function fixture(options = undefined) {
   const initial = context();
   const records = new Map([
     ['users/agent-1', initial.profile],
@@ -62,7 +67,7 @@ function fixture() {
   });
   const snapshot = (ref) => ({
     id: ref.id,
-    data: () => records.has(ref.path) ? structuredClone(records.get(ref.path)) : undefined,
+    data: () => records.has(ref.path) ? {...records.get(ref.path)} : undefined,
   });
   const querySnapshot = (query) => ({
     docs: [...records.entries()]
@@ -91,20 +96,36 @@ function fixture() {
       return result;
     },
   };
-  state.dependencies = adminExtractionRequestDependencies(db);
+  state.dependencies = adminExtractionRequestDependencies(db, options);
   state.run = (request = {auth, data: input}) => requestExtraction(
     request,
     state.dependencies,
     (event, fields) => state.logs.push({event, ...fields}),
   );
-  state.addJob = (id, status) => records.set(`${jobsPath}/${id}`, {
-    tripId: 'trip-1',
-    sourcePackageId: 'package-1',
-    status,
-    requestedByUid: 'agent-1',
-    resultingDraftId: status === 'completed' ? 'draft-1' : null,
-    failureCode: status === 'failed' ? 'extraction_failed' : null,
-  });
+  state.addJob = (id, status, contractVersion = null) => {
+    const resultType = contractVersion === supplierExtractionContractVersion ?
+      'supplier_extraction' : 'itinerary_draft';
+    const data = {
+      tripId: 'trip-1',
+      sourcePackageId: 'package-1',
+      status,
+      requestedByUid: 'agent-1',
+      resultingDraftId:
+        status === 'completed' && resultType === 'itinerary_draft' ?
+          'draft-1' : null,
+      failureCode: status === 'failed' ? 'extraction_failed' : null,
+      createdAt: Timestamp.fromMillis(1000),
+      updatedAt: Timestamp.fromMillis(1000),
+    };
+    if (contractVersion !== null) {
+      data.extractionContractVersion = contractVersion;
+      data.resultType = resultType;
+      data.resultingExtractionId =
+        status === 'completed' && resultType === 'supplier_extraction' ?
+          'extraction-1' : null;
+    }
+    records.set(`${jobsPath}/${id}`, data);
+  };
   return state;
 }
 
@@ -119,6 +140,8 @@ test('requires exactly tripId and sourcePackageId', () => {
     {...input, uid: 'agent-1'},
     {...input, status: 'queued'},
     {...input, provider: 'example'},
+    {...input, extractionContractVersion: supplierExtractionContractVersion},
+    {...input, resultType: 'supplier_extraction'},
   ]) {
     assert.throws(() => parseExtractionRequestInput(data), code('invalid-argument'));
   }
@@ -277,6 +300,10 @@ test('new request writes exactly one provider-independent queued job', async () 
   assert.equal('provider' in data, false);
   assert.equal('model' in data, false);
   assert.equal('id' in data, false);
+  assert.equal(
+    currentProductionExtractionContractVersion,
+    itineraryDraftExtractionContractVersion,
+  );
 });
 
 for (const status of ['queued', 'processing']) {
@@ -303,6 +330,75 @@ for (const status of ['completed', 'failed']) {
     });
     assert.equal(f.creates.length, 1);
   });
+}
+
+test('server-selected Supplier Extraction creation derives versioned metadata',
+  async () => {
+    const f = fixture({
+      extractionContractVersion: supplierExtractionContractVersion,
+    });
+    const result = await f.run();
+    assert.equal(result.createdNew, true);
+    const data = f.creates[0].data;
+    assert.equal(data.extractionContractVersion, 'supplier_extraction_v1');
+    assert.equal(data.resultType, 'supplier_extraction');
+    assert.equal(data.resultingDraftId, null);
+    assert.equal(data.resultingExtractionId, null);
+  });
+
+test('server-selected explicit draft creation derives draft result type',
+  async () => {
+    const f = fixture({
+      extractionContractVersion: itineraryDraftExtractionContractVersion,
+      persistVersionedContractMetadata: true,
+    });
+    await f.run();
+    const data = f.creates[0].data;
+    assert.equal(data.extractionContractVersion, 'itinerary_draft_v1');
+    assert.equal(data.resultType, 'itinerary_draft');
+    assert.equal(data.resultingExtractionId, null);
+  });
+
+test('legacy active draft job does not deduplicate Supplier Extraction',
+  async () => {
+    const f = fixture({
+      extractionContractVersion: supplierExtractionContractVersion,
+    });
+    f.addJob('legacy-active', 'queued');
+    const result = await f.run();
+    assert.equal(result.createdNew, true);
+    assert.equal(f.creates.length, 1);
+    assert.equal(f.creates[0].data.resultType, 'supplier_extraction');
+  });
+
+for (const status of ['queued', 'processing']) {
+  test(`same-contract Supplier Extraction ${status} job deduplicates`,
+    async () => {
+      const f = fixture({
+        extractionContractVersion: supplierExtractionContractVersion,
+      });
+      f.addJob('supplier-active', status, supplierExtractionContractVersion);
+      const result = await f.run();
+      assert.deepEqual(result, {
+        jobId: 'supplier-active',
+        status,
+        createdNew: false,
+      });
+      assert.deepEqual(f.creates, []);
+    });
+}
+
+for (const status of ['completed', 'failed']) {
+  test(`terminal Supplier Extraction ${status} job does not deduplicate`,
+    async () => {
+      const f = fixture({
+        extractionContractVersion: supplierExtractionContractVersion,
+      });
+      f.addJob('supplier-terminal', status, supplierExtractionContractVersion);
+      const result = await f.run();
+      assert.equal(result.createdNew, true);
+      assert.equal(f.creates.length, 1);
+    });
 }
 
 test('authenticated caller UID is authoritative', async () => {
