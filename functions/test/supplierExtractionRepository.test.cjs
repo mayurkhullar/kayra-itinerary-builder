@@ -4,6 +4,8 @@ const {
   SupplierExtractionPersistenceError,
   readSupplierExtractionSnapshot,
   serializeSupplierExtractionForPersistence,
+  supplierExtractionIdForJob,
+  validateSupplierExtractionForFinalization,
   writeSupplierExtractionSnapshot,
 } = require('../lib/itineraryExtraction/supplierExtractionRepository');
 const {
@@ -33,7 +35,8 @@ function trustedPackage(fileIds = ['file-1', 'file-2']) {
 }
 
 function snapshot({
-  extractionId = 'extraction-1',
+  extractionId = 'job-1',
+  jobId = 'job-1',
   packageValue = trustedPackage(),
   payload = completePayload(),
 } = {}) {
@@ -41,7 +44,7 @@ function snapshot({
     extractionId,
     tripId: 'trip-1',
     sourcePackageId: 'package-1',
-    jobId: 'job-1',
+    jobId,
     requestedByUid: 'agent-1',
     createdAt: new Date('2026-09-29T05:00:00.000Z'),
     providerVersion: 'kayra_itinerary_extraction_v3_staging',
@@ -96,8 +99,15 @@ class MemoryStore {
   constructor(packageValue = trustedPackage()) {
     this.packageValue = packageValue;
     this.records = new Map();
+    this.jobs = new Map([['trip-1/job-1', {
+      status: 'processing',
+      contract: 'supplier_extraction_v1',
+      resultType: 'supplier_extraction',
+      resultingExtractionId: null,
+    }]]);
     this.createCalls = 0;
     this.failRelationship = false;
+    this.failChildWrite = false;
   }
 
   async loadTrustedPackage(tripId, packageId) {
@@ -111,18 +121,68 @@ class MemoryStore {
     return this.packageValue;
   }
 
-  async createSnapshot(records) {
+  async beginSnapshot(records) {
     this.createCalls += 1;
     const key = `${records.root.tripId}/${records.root.extractionId}`;
     if (this.records.has(key)) {
-      throw new SupplierExtractionPersistenceError(
-        'SUPPLIER_EXTRACTION_PERSISTENCE_FAILED',
-        'Snapshot already exists.',
-      );
+      return this.records.get(key).root.persistenceState;
     }
     const stored = clone(records);
-    stored.root.persistenceState = 'complete';
+    stored.days = [];
+    stored.facts = [];
+    stored.reviewIssues = [];
     this.records.set(key, stored);
+    return 'writing';
+  }
+
+  async writeSnapshotChildren(records) {
+    if (this.failChildWrite) {
+      throw new SupplierExtractionPersistenceError(
+        'SUPPLIER_EXTRACTION_PERSISTENCE_FAILED',
+        'Synthetic child-write failure.',
+      );
+    }
+    const key = `${records.root.tripId}/${records.root.extractionId}`;
+    const stored = this.records.get(key);
+    if (!stored || stored.root.persistenceState !== 'writing') {
+      throw new SupplierExtractionPersistenceError(
+        'INVALID_SUPPLIER_EXTRACTION_STATE',
+        'Snapshot is not writing.',
+      );
+    }
+    stored.days = clone(records.days);
+    stored.facts = clone(records.facts);
+    stored.reviewIssues = clone(records.reviewIssues);
+  }
+
+  async finalizeSnapshot(records, packageValue) {
+    const key = `${records.root.tripId}/${records.root.extractionId}`;
+    const stored = this.records.get(key);
+    const job = this.jobs.get(`${records.root.tripId}/${records.root.jobId}`);
+    if (stored?.root.persistenceState === 'complete' &&
+        job?.status === 'completed' &&
+        job.resultingExtractionId === records.root.extractionId) {
+      return 'already_completed';
+    }
+    if (!stored || stored.root.persistenceState !== 'writing' ||
+        !job || job.status !== 'processing') {
+      throw new SupplierExtractionPersistenceError(
+        'SUPPLIER_EXTRACTION_JOB_STATE_MISMATCH',
+        'Synthetic state mismatch.',
+      );
+    }
+    if (job.contract !== 'supplier_extraction_v1' ||
+        job.resultType !== 'supplier_extraction') {
+      throw new SupplierExtractionPersistenceError(
+        'SUPPLIER_EXTRACTION_JOB_CONTRACT_MISMATCH',
+        'Synthetic contract mismatch.',
+      );
+    }
+    validateSupplierExtractionForFinalization(stored, packageValue);
+    stored.root.persistenceState = 'complete';
+    job.status = 'completed';
+    job.resultingExtractionId = records.root.extractionId;
+    return 'completed';
   }
 
   async readSnapshot(tripId, extractionId) {
@@ -151,8 +211,7 @@ test('successful write/read round-trip preserves all staged entity groups', asyn
   const original = snapshot();
   const result = await write(original, store);
   const restored = await readSupplierExtractionSnapshot(
-    'trip-1',
-    result.extractionId,
+    'trip-1', result.extractionId,
     store,
   );
 
@@ -233,17 +292,22 @@ test('global accommodation retains unknown stay dates', async () => {
   assert.equal(hotel.details.nightCount, 4);
 });
 
-test('rerun uses a new ID and cannot overwrite an existing snapshot', async () => {
+test('same job retry is idempotent and a rerun job uses a new snapshot', async () => {
   const store = new MemoryStore();
-  const first = snapshot({extractionId: 'extraction-1'});
-  const second = snapshot({extractionId: 'extraction-2'});
+  store.jobs.set('trip-1/job-2', {
+    status: 'processing',
+    contract: 'supplier_extraction_v1',
+    resultType: 'supplier_extraction',
+    resultingExtractionId: null,
+  });
+  const first = snapshot({extractionId: 'job-1', jobId: 'job-1'});
+  const second = snapshot({extractionId: 'job-2', jobId: 'job-2'});
+  await write(first, store);
   await write(first, store);
   await write(second, store);
-  await assert.rejects(() => write(first, store),
-    hasCode('SUPPLIER_EXTRACTION_PERSISTENCE_FAILED'));
   assert.equal(store.records.size, 2);
   assert.deepEqual(
-    await readSupplierExtractionSnapshot('trip-1', 'extraction-1', store),
+    await readSupplierExtractionSnapshot('trip-1', 'job-1', store),
     first,
   );
 });
@@ -293,9 +357,9 @@ test('writing state is never reconstructed as a complete snapshot', async () => 
   const records = clone(serializeSupplierExtractionForPersistence(original));
   records.root.persistenceState = 'writing';
   records.facts = records.facts.slice(0, 1);
-  store.records.set('trip-1/extraction-1', records);
+  store.records.set('trip-1/job-1', records);
   await assert.rejects(
-    () => readSupplierExtractionSnapshot('trip-1', 'extraction-1', store),
+    () => readSupplierExtractionSnapshot('trip-1', 'job-1', store),
     hasCode('SUPPLIER_EXTRACTION_UNAVAILABLE'),
   );
 });
@@ -309,9 +373,9 @@ test('unknown root or child fields are rejected on trusted read', async () => {
     const records = clone(serializeSupplierExtractionForPersistence(snapshot()));
     records.root.persistenceState = 'complete';
     mutate(records);
-    store.records.set('trip-1/extraction-1', records);
+    store.records.set('trip-1/job-1', records);
     await assert.rejects(
-      () => readSupplierExtractionSnapshot('trip-1', 'extraction-1', store),
+      () => readSupplierExtractionSnapshot('trip-1', 'job-1', store),
       hasCode('INVALID_STORED_SUPPLIER_EXTRACTION'),
     );
   }
@@ -326,10 +390,24 @@ test('child document identity and sequence corruption are rejected', async () =>
     const records = clone(serializeSupplierExtractionForPersistence(snapshot()));
     records.root.persistenceState = 'complete';
     mutate(records);
-    store.records.set('trip-1/extraction-1', records);
+    store.records.set('trip-1/job-1', records);
     await assert.rejects(
-      () => readSupplierExtractionSnapshot('trip-1', 'extraction-1', store),
+      () => readSupplierExtractionSnapshot('trip-1', 'job-1', store),
       hasCode('INVALID_STORED_SUPPLIER_EXTRACTION'),
     );
   }
+});
+
+test('extraction ID is deterministically owned by the job', () => {
+  assert.equal(supplierExtractionIdForJob('job-1'), 'job-1');
+  assert.throws(() => supplierExtractionIdForJob('bad/job'));
+});
+
+test('child-write failure leaves the root writing and job processing', async () => {
+  const store = new MemoryStore();
+  store.failChildWrite = true;
+  await assert.rejects(() => write(snapshot(), store),
+    hasCode('SUPPLIER_EXTRACTION_PERSISTENCE_FAILED'));
+  assert.equal(store.records.get('trip-1/job-1').root.persistenceState, 'writing');
+  assert.equal(store.jobs.get('trip-1/job-1').status, 'processing');
 });

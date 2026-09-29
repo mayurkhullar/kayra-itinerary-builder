@@ -1,6 +1,7 @@
 import {
   DocumentReference,
   DocumentSnapshot,
+  FieldValue,
   Firestore,
   Timestamp,
 } from "firebase-admin/firestore";
@@ -8,8 +9,16 @@ import {
   SupplierExtractionChildRecord,
   SupplierExtractionPersistenceError,
   SupplierExtractionPersistenceRecords,
+  SupplierExtractionRootRecord,
   SupplierExtractionRepositoryStore,
+  validateSupplierExtractionForFinalization,
 } from "./supplierExtractionRepository";
+import {
+  completedSupplierExtractionJobUpdate,
+  ExtractionJobRecord,
+  parseExtractionJobRecord,
+  supplierExtractionContractVersion,
+} from "./extractionJob";
 import {
   TrustedSupplierSourcePackage,
   validateSourceFile,
@@ -33,14 +42,15 @@ export function adminSupplierExtractionRepositoryStore(
         getAll: (...references) => db.getAll(...references),
       }, tripId, sourcePackageId),
 
-    async createSnapshot(records, trustedPackage) {
+    async beginSnapshot(records, trustedPackage) {
       const root = records.root;
       const rootReference = extractionDocument(
         db,
         root.tripId,
         root.extractionId,
       );
-      await db.runTransaction(async (transaction) => {
+      const jobReference = extractionJobDocument(db, root.tripId, root.jobId);
+      return db.runTransaction(async (transaction) => {
         const currentPackage = await loadTrustedPackage(
           db,
           transaction,
@@ -48,29 +58,73 @@ export function adminSupplierExtractionRepositoryStore(
           root.sourcePackageId,
         );
         requireSameTrustedPackage(trustedPackage, currentPackage);
+        const [rootSnapshot, jobSnapshot] = await transaction.getAll(
+          rootReference,
+          jobReference,
+        );
+        const job = storedExtractionJob(jobSnapshot);
+        if (rootSnapshot.exists) {
+          const storedRoot = requireMatchingRoot(
+            rootSnapshot,
+            root,
+            ["writing", "complete"],
+          );
+          if (storedRoot.persistenceState === "complete") {
+            requireCompletedPair(storedRoot, job, jobReference.id);
+          } else {
+            requireProcessingSupplierJob(storedRoot, job, jobReference.id);
+          }
+          return storedRoot.persistenceState;
+        }
+        requireProcessingSupplierJob(root, job, jobReference.id);
         transaction.create(rootReference, rootForFirestore(root));
+        return "writing";
       });
+    },
 
+    async writeSnapshotChildren(records) {
+      const root = records.root;
+      const rootReference = extractionDocument(
+        db,
+        root.tripId,
+        root.extractionId,
+      );
+      const jobReference = extractionJobDocument(db, root.tripId, root.jobId);
       const children = [
         ...childWrites(rootReference, "days", records.days),
         ...childWrites(rootReference, "facts", records.facts),
         ...childWrites(rootReference, "review_issues", records.reviewIssues),
       ];
       for (let offset = 0; offset < children.length; offset += childBatchSize) {
-        const batch = db.batch();
-        for (const child of children.slice(offset, offset + childBatchSize)) {
-          batch.create(child.reference, child.data);
-        }
-        await batch.commit();
+        const group = children.slice(offset, offset + childBatchSize);
+        await db.runTransaction(async (transaction) => {
+          const snapshots = await transaction.getAll(
+            rootReference,
+            jobReference,
+            ...group.map((child) => child.reference),
+          );
+          const storedRoot = requireMatchingRoot(snapshots[0], root, ["writing"]);
+          const job = storedExtractionJob(snapshots[1]);
+          requireProcessingSupplierJob(storedRoot, job, jobReference.id);
+          group.forEach((child, index) => {
+            const snapshot = snapshots[index + 2];
+            if (!snapshot.exists) {
+              transaction.create(child.reference, child.data);
+            } else if (!sameJsonValue(snapshot.data(), child.data)) {
+              throw invalidStoredChildren();
+            }
+          });
+        });
       }
+    },
 
-      await db.runTransaction(async (transaction) => {
-        const snapshot = await transaction.get(rootReference);
-        if (!snapshot.exists || snapshot.data()?.persistenceState !== "writing") {
-          throw persistenceFailure();
-        }
-        transaction.update(rootReference, {persistenceState: "complete"});
-      });
+    async finalizeSnapshot(records, trustedPackage) {
+      try {
+        return await finalizeSnapshotAndJob(db, records, trustedPackage);
+      } catch (error) {
+        if (error instanceof SupplierExtractionPersistenceError) throw error;
+        throw finalizationFailure();
+      }
     },
 
     async readSnapshot(tripId, extractionId) {
@@ -90,6 +144,69 @@ export function adminSupplierExtractionRepositoryStore(
       } as SupplierExtractionPersistenceRecords;
     },
   };
+}
+
+async function finalizeSnapshotAndJob(
+  db: Firestore,
+  records: SupplierExtractionPersistenceRecords,
+  trustedPackage: TrustedSupplierSourcePackage,
+): Promise<"completed" | "already_completed"> {
+  const expectedRoot = records.root;
+  const rootReference = extractionDocument(
+    db,
+    expectedRoot.tripId,
+    expectedRoot.extractionId,
+  );
+  const jobReference = extractionJobDocument(
+    db,
+    expectedRoot.tripId,
+    expectedRoot.jobId,
+  );
+  return db.runTransaction(async (transaction) => {
+    const currentPackage = await loadTrustedPackage(
+      db,
+      transaction,
+      expectedRoot.tripId,
+      expectedRoot.sourcePackageId,
+    );
+    requireSameTrustedPackage(trustedPackage, currentPackage);
+    const [rootSnapshot, jobSnapshot] = await transaction.getAll(
+      rootReference,
+      jobReference,
+    );
+    const root = requireMatchingRoot(
+      rootSnapshot,
+      expectedRoot,
+      ["writing", "complete"],
+    );
+    const job = storedExtractionJob(jobSnapshot);
+    if (root.persistenceState === "complete") {
+      requireCompletedPair(root, job, jobReference.id);
+      return "already_completed";
+    }
+    requireProcessingSupplierJob(root, job, jobReference.id);
+
+    const [days, facts, reviewIssues] = await Promise.all([
+      transaction.get(rootReference.collection("days").orderBy("snapshotOrder")),
+      transaction.get(rootReference.collection("facts").orderBy("snapshotOrder")),
+      transaction.get(
+        rootReference.collection("review_issues").orderBy("snapshotOrder"),
+      ),
+    ]);
+    validateSupplierExtractionForFinalization({
+      root,
+      days: childRecordsFromSnapshot(days.docs),
+      facts: childRecordsFromSnapshot(facts.docs),
+      reviewIssues: childRecordsFromSnapshot(reviewIssues.docs),
+    }, currentPackage);
+
+    transaction.update(rootReference, {persistenceState: "complete"});
+    transaction.update(jobReference, {
+      ...completedSupplierExtractionJobUpdate(job, root.extractionId),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    return "completed";
+  });
 }
 
 async function loadTrustedPackage(
@@ -168,6 +285,14 @@ function extractionDocument(
   return db.doc(`trips/${tripId}/supplier_extractions/${extractionId}`);
 }
 
+function extractionJobDocument(
+  db: Firestore,
+  tripId: string,
+  jobId: string,
+): DocumentReference {
+  return db.doc(`trips/${tripId}/itinerary_extraction_jobs/${jobId}`);
+}
+
 function rootForFirestore(
   root: SupplierExtractionPersistenceRecords["root"],
 ): Record<string, unknown> {
@@ -188,6 +313,85 @@ function rootFromFirestore(input: unknown): unknown {
     data.createdAt = data.createdAt.toDate().toISOString();
   }
   return data;
+}
+
+function requireMatchingRoot(
+  snapshot: DocumentSnapshot,
+  expected: SupplierExtractionRootRecord,
+  allowedStates: readonly SupplierExtractionRootRecord["persistenceState"][],
+): SupplierExtractionRootRecord {
+  if (!snapshot.exists) throw invalidSnapshotState();
+  const raw = rootFromFirestore(snapshot.data());
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw relationshipMismatch();
+  }
+  const actual = raw as Record<string, unknown>;
+  if (!allowedStates.includes(
+    actual.persistenceState as SupplierExtractionRootRecord["persistenceState"],
+  )) {
+    throw invalidSnapshotState();
+  }
+  const comparable = {...expected, persistenceState: actual.persistenceState};
+  if (!sameJsonValue(actual, comparable)) throw relationshipMismatch();
+  return actual as unknown as SupplierExtractionRootRecord;
+}
+
+function storedExtractionJob(snapshot: DocumentSnapshot): ExtractionJobRecord {
+  if (!snapshot.exists) throw jobStateMismatch();
+  try {
+    return parseExtractionJobRecord(snapshot.data(), {
+      isTimestamp: (value) => value instanceof Timestamp,
+    });
+  } catch (_) {
+    throw jobStateMismatch();
+  }
+}
+
+function requireSnapshotJobRelationship(
+  root: SupplierExtractionRootRecord,
+  job: ExtractionJobRecord,
+  jobId: string,
+): void {
+  if (root.extractionId !== jobId || root.jobId !== jobId ||
+      root.tripId !== job.tripId ||
+      root.sourcePackageId !== job.sourcePackageId ||
+      root.requestedByUid !== job.requestedByUid) {
+    throw relationshipMismatch();
+  }
+}
+
+function requireProcessingSupplierJob(
+  root: SupplierExtractionRootRecord,
+  job: ExtractionJobRecord,
+  jobId: string,
+): void {
+  requireSnapshotJobRelationship(root, job, jobId);
+  if (job.extractionContractVersion !== supplierExtractionContractVersion ||
+      job.resultType !== "supplier_extraction" ||
+      job.persistenceShape !== "versioned") {
+    throw jobContractMismatch();
+  }
+  if (job.status !== "processing" || job.resultingDraftId !== null ||
+      job.resultingExtractionId !== null || job.failureCode !== null) {
+    throw jobStateMismatch();
+  }
+}
+
+function requireCompletedPair(
+  root: SupplierExtractionRootRecord,
+  job: ExtractionJobRecord,
+  jobId: string,
+): void {
+  requireSnapshotJobRelationship(root, job, jobId);
+  if (job.extractionContractVersion !== supplierExtractionContractVersion ||
+      job.resultType !== "supplier_extraction" ||
+      job.persistenceShape !== "versioned") {
+    throw jobContractMismatch();
+  }
+  if (job.status !== "completed" ||
+      job.resultingExtractionId !== root.extractionId) {
+    throw jobStateMismatch();
+  }
 }
 
 function childWrites<T>(
@@ -220,6 +424,38 @@ async function readChildren(
   });
 }
 
+function childRecordsFromSnapshot(
+  documents: readonly DocumentSnapshot[],
+): readonly SupplierExtractionChildRecord<never>[] {
+  return documents.map((document) => {
+    const data = document.data() ?? {};
+    return {
+      documentId: document.id,
+      snapshotOrder: data.snapshotOrder,
+      value: data.value,
+    } as SupplierExtractionChildRecord<never>;
+  });
+}
+
+function sameJsonValue(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left) && Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((value, index) => sameJsonValue(value, right[index]));
+  }
+  if (!left || !right || typeof left !== "object" || typeof right !== "object") {
+    return false;
+  }
+  const leftRecord = left as Record<string, unknown>;
+  const rightRecord = right as Record<string, unknown>;
+  const leftKeys = Object.keys(leftRecord).sort();
+  const rightKeys = Object.keys(rightRecord).sort();
+  return leftKeys.length === rightKeys.length &&
+    leftKeys.every((key, index) => key === rightKeys[index] &&
+      sameJsonValue(leftRecord[key], rightRecord[key]));
+}
+
 function invalidRelationship(message: string): SupplierExtractionPersistenceError {
   return new SupplierExtractionPersistenceError(
     "INVALID_SUPPLIER_EXTRACTION",
@@ -227,10 +463,45 @@ function invalidRelationship(message: string): SupplierExtractionPersistenceErro
   );
 }
 
-function persistenceFailure(): SupplierExtractionPersistenceError {
+function invalidSnapshotState(): SupplierExtractionPersistenceError {
   return new SupplierExtractionPersistenceError(
-    "SUPPLIER_EXTRACTION_PERSISTENCE_FAILED",
-    "Supplier Extraction Snapshot persistence did not complete.",
+    "INVALID_SUPPLIER_EXTRACTION_STATE",
+    "Supplier Extraction Snapshot persistence state is invalid.",
+  );
+}
+
+function invalidStoredChildren(): SupplierExtractionPersistenceError {
+  return new SupplierExtractionPersistenceError(
+    "INVALID_STORED_SUPPLIER_EXTRACTION",
+    "Stored Supplier Extraction Snapshot children are inconsistent.",
+  );
+}
+
+function jobStateMismatch(): SupplierExtractionPersistenceError {
+  return new SupplierExtractionPersistenceError(
+    "SUPPLIER_EXTRACTION_JOB_STATE_MISMATCH",
+    "Supplier Extraction job state does not match its Snapshot.",
+  );
+}
+
+function jobContractMismatch(): SupplierExtractionPersistenceError {
+  return new SupplierExtractionPersistenceError(
+    "SUPPLIER_EXTRACTION_JOB_CONTRACT_MISMATCH",
+    "Supplier Extraction job contract is invalid.",
+  );
+}
+
+function relationshipMismatch(): SupplierExtractionPersistenceError {
+  return new SupplierExtractionPersistenceError(
+    "SUPPLIER_EXTRACTION_RELATIONSHIP_MISMATCH",
+    "Supplier Extraction Snapshot relationships are inconsistent.",
+  );
+}
+
+function finalizationFailure(): SupplierExtractionPersistenceError {
+  return new SupplierExtractionPersistenceError(
+    "SUPPLIER_EXTRACTION_FINALIZATION_FAILED",
+    "Supplier Extraction Snapshot finalization did not complete.",
   );
 }
 

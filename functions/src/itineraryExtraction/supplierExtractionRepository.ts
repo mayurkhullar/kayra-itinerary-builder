@@ -19,7 +19,13 @@ export type SupplierExtractionPersistenceErrorCode =
   "INVALID_SUPPLIER_EXTRACTION" |
   "SUPPLIER_EXTRACTION_PERSISTENCE_FAILED" |
   "SUPPLIER_EXTRACTION_UNAVAILABLE" |
-  "INVALID_STORED_SUPPLIER_EXTRACTION";
+  "INVALID_STORED_SUPPLIER_EXTRACTION" |
+  "INVALID_SUPPLIER_EXTRACTION_STATE" |
+  "INCOMPLETE_SUPPLIER_EXTRACTION" |
+  "SUPPLIER_EXTRACTION_JOB_STATE_MISMATCH" |
+  "SUPPLIER_EXTRACTION_JOB_CONTRACT_MISMATCH" |
+  "SUPPLIER_EXTRACTION_RELATIONSHIP_MISMATCH" |
+  "SUPPLIER_EXTRACTION_FINALIZATION_FAILED";
 
 export class SupplierExtractionPersistenceError extends Error {
   constructor(
@@ -63,10 +69,17 @@ export interface SupplierExtractionRepositoryStore {
     tripId: string,
     sourcePackageId: string,
   ): Promise<TrustedSupplierSourcePackage>;
-  createSnapshot(
+  beginSnapshot(
     records: SupplierExtractionPersistenceRecords,
     trustedPackage: TrustedSupplierSourcePackage,
+  ): Promise<SupplierExtractionPersistenceState>;
+  writeSnapshotChildren(
+    records: SupplierExtractionPersistenceRecords,
   ): Promise<void>;
+  finalizeSnapshot(
+    records: SupplierExtractionPersistenceRecords,
+    trustedPackage: TrustedSupplierSourcePackage,
+  ): Promise<"completed" | "already_completed">;
   readSnapshot(
     tripId: string,
     extractionId: string,
@@ -91,7 +104,10 @@ export async function writeSupplierExtractionSnapshot(
   requireIdentity(input.extractionId, "Supplier extraction");
   const identities = snapshotIdentities(input.snapshot);
   if (identities.tripId !== input.tripId ||
-      identities.extractionId !== input.extractionId) {
+      identities.extractionId !== input.extractionId ||
+      identities.extractionId !== supplierExtractionIdForJob(
+        identities.jobId,
+      )) {
     throw invalid("Snapshot path identities are inconsistent.");
   }
   try {
@@ -103,10 +119,12 @@ export async function writeSupplierExtractionSnapshot(
       input.snapshot,
       trustedPackage,
     );
-    await store.createSnapshot(
-      serializeSupplierExtractionForPersistence(snapshot),
-      trustedPackage,
-    );
+    const records = serializeSupplierExtractionForPersistence(snapshot);
+    const state = await store.beginSnapshot(records, trustedPackage);
+    if (state === "writing") {
+      await store.writeSnapshotChildren(records);
+    }
+    await store.finalizeSnapshot(records, trustedPackage);
     return {extractionId: snapshot.extractionId};
   } catch (error) {
     if (error instanceof SupplierExtractionPersistenceError) throw error;
@@ -118,6 +136,11 @@ export async function writeSupplierExtractionSnapshot(
       "Validated Supplier Extraction Snapshot could not be persisted.",
     );
   }
+}
+
+/** One server-created extraction job owns one stable Snapshot identity. */
+export function supplierExtractionIdForJob(jobId: string): string {
+  return requireIdentity(jobId, "Extraction job");
 }
 
 export async function readSupplierExtractionSnapshot(
@@ -223,6 +246,63 @@ function reconstructStoredSnapshot(
   };
 }
 
+export function validateSupplierExtractionForFinalization(
+  records: SupplierExtractionPersistenceRecords,
+  trustedPackage: TrustedSupplierSourcePackage,
+): SupplierExtractionSnapshot {
+  const root = exactRoot(records.root);
+  if (root.persistenceState !== "writing") {
+    throw new SupplierExtractionPersistenceError(
+      "INVALID_SUPPLIER_EXTRACTION_STATE",
+      "Supplier Extraction Snapshot is not awaiting finalization.",
+    );
+  }
+  requireExpectedChildCounts(records, root);
+  try {
+    return parseStoredSupplierExtractionSnapshot({
+      schemaVersion: root.schemaVersion,
+      extractionId: root.extractionId,
+      tripId: root.tripId,
+      sourcePackageId: root.sourcePackageId,
+      jobId: root.jobId,
+      requestedByUid: root.requestedByUid,
+      createdAt: root.createdAt,
+      providerVersion: root.providerVersion,
+      title: root.title,
+      days: orderedValues(records.days, "staged days"),
+      facts: orderedValues(records.facts, "staged facts"),
+      reviewIssues: orderedValues(records.reviewIssues, "review issues"),
+      counts: root.counts,
+    }, trustedPackage);
+  } catch (error) {
+    if (error instanceof SupplierExtractionPersistenceError) throw error;
+    if (error instanceof SupplierExtractionSnapshotError) throw malformed();
+    throw error;
+  }
+}
+
+function requireExpectedChildCounts(
+  records: SupplierExtractionPersistenceRecords,
+  root: SupplierExtractionRootRecord,
+): void {
+  const expectedFacts = root.counts.assignedServices +
+    root.counts.unassignedServices + root.counts.packageFacts +
+    root.counts.ancillaryFlights + root.counts.ancillaryVisas +
+    root.counts.commercialIndicators;
+  const actual = [
+    [records.days.length, root.counts.days],
+    [records.facts.length, expectedFacts],
+    [records.reviewIssues.length, root.counts.reviewIssues],
+  ] as const;
+  if (actual.some(([count, expected]) => count < expected)) {
+    throw new SupplierExtractionPersistenceError(
+      "INCOMPLETE_SUPPLIER_EXTRACTION",
+      "Supplier Extraction Snapshot children are incomplete.",
+    );
+  }
+  if (actual.some(([count, expected]) => count !== expected)) throw malformed();
+}
+
 function exactRoot(input: unknown): SupplierExtractionRootRecord {
   const data = record(input, "Stored extraction root");
   const fields = [
@@ -265,6 +345,7 @@ function snapshotIdentities(input: unknown): {
   extractionId: string;
   tripId: string;
   sourcePackageId: string;
+  jobId: string;
 } {
   const data = record(input, "Supplier Extraction Snapshot");
   return {
@@ -274,6 +355,7 @@ function snapshotIdentities(input: unknown): {
       data.sourcePackageId,
       "Supplier Source package",
     ),
+    jobId: requireIdentity(data.jobId, "Extraction job"),
   };
 }
 
