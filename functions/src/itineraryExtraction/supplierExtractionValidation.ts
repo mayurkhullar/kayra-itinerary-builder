@@ -1068,7 +1068,7 @@ function normalizeSource(
   context: SupplierExtractionNormalizationContext,
 ): TrustedSnapshotSourceReference {
   const data = sparseRecord(input, sourceFields, [], "Provider source locator");
-  const sourceLabel = optionalSemanticText(data, "sourceLabel", "Source label");
+  const sourceLabel = optionalCompactSourceLabel(data);
   let fileId = context.trustedPackage.files.length === 1 ?
     context.trustedPackage.files[0].sourceFileId : null;
   if (has(data, "fileIndex")) {
@@ -1082,6 +1082,15 @@ function normalizeSource(
     supplierSourceFileId: fileId,
     sourceLabel,
   };
+}
+
+function optionalCompactSourceLabel(record: RecordValue): string | null {
+  if (!has(record, "sourceLabel")) return null;
+  const value = requiredSemanticText(record.sourceLabel, "Source label");
+  if (value.length > 160 || /[\r\n]/.test(value)) {
+    invalid("Source label must be compact single-line text.");
+  }
+  return value;
 }
 
 function defaultSourceReference(
