@@ -362,20 +362,29 @@ test('logs contain lifecycle counts but no extracted semantic or source values',
   assert.equal(normalized.assignedServices, 1);
 });
 
-test('new processor is isolated from production routing and canonical draft APIs', () => {
+test('V3 routing remains separated from client paths and canonical draft APIs', () => {
   const sourceRoot = path.resolve(__dirname, '../src');
-  const productionFiles = [
+  const clientAndV2Files = [
     'index.ts',
-    'itineraryExtraction/trigger.ts',
     'itineraryExtraction/processor.ts',
     'itineraryExtraction/processorAdmin.ts',
     'itineraryExtraction/request.ts',
+    'itineraryExtraction/requestAdmin.ts',
   ];
-  for (const relative of productionFiles) {
+  for (const relative of clientAndV2Files) {
     const source = fs.readFileSync(path.join(sourceRoot, relative), 'utf8');
     assert.equal(source.includes('supplierExtractionProcessor'), false, relative);
     assert.equal(source.includes('supplierExtractionProcessorAdmin'), false, relative);
   }
+  const routerComposition = fs.readFileSync(path.join(
+    sourceRoot,
+    'itineraryExtraction/extractionProcessorRouterAdmin.ts',
+  ), 'utf8');
+  assert.equal(routerComposition.includes('processSupplierExtractionJob'), true);
+  assert.equal(
+    routerComposition.includes('adminSupplierExtractionProcessorDependencies'),
+    true,
+  );
   const processorSource = fs.readFileSync(
     path.join(sourceRoot, 'itineraryExtraction/supplierExtractionProcessor.ts'),
     'utf8',

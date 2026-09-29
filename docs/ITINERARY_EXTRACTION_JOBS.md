@@ -212,8 +212,12 @@ does not satisfy Kayra's schema becomes `invalid_extraction_result`.
 The second-generation `processItineraryExtractionJob` Function listens only for
 document creation at
 `trips/{tripId}/itinerary_extraction_jobs/{jobId}`. It passes the trusted path
-parameters to the existing processor, which reloads and validates the
-authoritative job rather than trusting snapshot fields.
+parameters to a contract-aware router, which reloads and strictly parses the
+authoritative job rather than trusting snapshot fields. Historical legacy and
+explicit `itinerary_draft_v1` jobs route only to the existing V2.4 processor;
+explicit `supplier_extraction_v1` jobs route only to the Supplier Extraction
+processor. Malformed, partial or unknown contract metadata invokes neither
+processor and is handled as a deterministic routing failure.
 
 Firestore/Eventarc delivery may occur more than once. The processor's atomic
 `queued -> processing` claim makes duplicate deliveries safe; an already
@@ -400,18 +404,20 @@ failure finalization may update only a job that is still processing. It must
 never overwrite a committed completion.
 
 The snapshot repository exposes separate begin, child-write and coordinated
-finalization phases. An isolated V3 processor now composes those phases for
-strict `supplier_extraction_v1` jobs, but no production callable, trigger or
-V2.4 processor routes to it. A duplicate invocation that finds a job already in
-`processing` returns `already_processing` without another provider call; stale
-job lease/recovery remains a separate follow-up. Before recording a persistence
-failure after an ambiguous write, the processor re-reads the authoritative root
-and job pair. A valid completed pair is success, a verified writing/processing
-pair may be failed with `supplier_extraction_persistence_failed`, and an
-inconsistent or unverifiable pair is left unchanged for operational recovery.
-Cleanup or recovery for abandoned `writing` roots is also an operational
-follow-up; such roots remain inaccessible and must not be treated as successful
-results.
+finalization phases. The V3 processor composes those phases for strict
+`supplier_extraction_v1` jobs, and the trigger router can now select that path
+for an authoritative explicit V3 job. The request callable still creates only
+the historical V2.4 contract, so this routing capability does not change
+ordinary application behavior or give clients a contract selector. A duplicate
+invocation that finds a job already in `processing` returns
+`already_processing` without another provider call; stale job lease/recovery
+remains a separate follow-up. Before recording a persistence failure after an
+ambiguous write, the processor re-reads the authoritative root and job pair. A
+valid completed pair is success, a verified writing/processing pair may be
+failed with `supplier_extraction_persistence_failed`, and an inconsistent or
+unverifiable pair is left unchanged for operational recovery. Cleanup or
+recovery for abandoned `writing` roots is also an operational follow-up; such
+roots remain inaccessible and must not be treated as successful results.
 
 This two-phase visibility protocol preserves all normalized source facts before
 review. Later canonical finalization follows the staging model's disposition

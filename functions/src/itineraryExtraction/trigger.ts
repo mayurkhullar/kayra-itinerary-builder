@@ -1,28 +1,32 @@
-import {getFirestore, Firestore} from "firebase-admin/firestore";
-import {getStorage, Storage} from "firebase-admin/storage";
+import {getFirestore} from "firebase-admin/firestore";
+import {getStorage} from "firebase-admin/storage";
 import {logger} from "firebase-functions";
 import {
   DocumentOptions,
   onDocumentCreated,
 } from "firebase-functions/v2/firestore";
 import {
-  adminGeminiItineraryExtractionProvider,
-} from "./geminiProviderAdmin";
+  ExtractionProcessorRouterDependencies,
+  ExtractionProcessorRouterResult,
+  routeItineraryExtractionJob,
+} from "./extractionProcessorRouter";
 import {
-  ItineraryExtractionProcessorDependencies,
+  adminExtractionProcessorRouterDependencies,
+} from "./extractionProcessorRouterAdmin";
+import {
   ItineraryExtractionProcessorError,
   ItineraryExtractionProcessorInput,
   ItineraryExtractionProcessorLog,
-  ItineraryExtractionProcessorResult,
-  processItineraryExtractionJob as runItineraryExtractionProcessor,
 } from "./processor";
-import {adminExtractionJobStore} from "./processorAdmin";
 import {
-  adminSupplierSourceReaderDependencies,
-} from "./sourceReaderAdmin";
+  SupplierExtractionProcessorError,
+} from "./supplierExtractionProcessor";
 import {validSourceIdentity} from "./sourceReaderValidation";
 
-type Bucket = ReturnType<Storage["bucket"]>;
+export {
+  adminItineraryExtractionProcessorDependencies,
+  productionItineraryExtractionAdapters,
+} from "./extractionProcessorRouterAdmin";
 
 export const itineraryExtractionTriggerPath =
   "trips/{tripId}/itinerary_extraction_jobs/{jobId}";
@@ -55,44 +59,18 @@ export type ItineraryExtractionTriggerLog = (
   fields: Record<string, unknown>,
 ) => void;
 
-export type ItineraryExtractionProcessorRunner = (
+export type ItineraryExtractionRouterRunner = (
   input: ItineraryExtractionProcessorInput,
-  dependencies: ItineraryExtractionProcessorDependencies,
+  dependencies: ExtractionProcessorRouterDependencies,
   log?: ItineraryExtractionProcessorLog,
-) => Promise<ItineraryExtractionProcessorResult>;
-
-interface ProductionAdapterFactories {
-  readonly jobs: typeof adminExtractionJobStore;
-  readonly sources: typeof adminSupplierSourceReaderDependencies;
-  readonly provider: typeof adminGeminiItineraryExtractionProvider;
-}
-
-export const productionItineraryExtractionAdapters:
-    ProductionAdapterFactories = Object.freeze({
-  jobs: adminExtractionJobStore,
-  sources: adminSupplierSourceReaderDependencies,
-  provider: adminGeminiItineraryExtractionProvider,
-});
-
-export function adminItineraryExtractionProcessorDependencies(
-  db: Firestore,
-  bucket: Bucket,
-  providerLog: ItineraryExtractionProcessorLog = () => {},
-  adapters: ProductionAdapterFactories = productionItineraryExtractionAdapters,
-): ItineraryExtractionProcessorDependencies {
-  return {
-    jobs: adapters.jobs(db),
-    sources: adapters.sources(db, bucket),
-    provider: adapters.provider(bucket, {log: providerLog}),
-  };
-}
+) => Promise<ExtractionProcessorRouterResult>;
 
 export function createItineraryExtractionCreateHandler(options: {
-  createDependencies: () => ItineraryExtractionProcessorDependencies;
-  processor?: ItineraryExtractionProcessorRunner;
+  createDependencies: () => ExtractionProcessorRouterDependencies;
+  router?: ItineraryExtractionRouterRunner;
   log?: ItineraryExtractionTriggerLog;
 }): (event: ItineraryExtractionCreateEvent) => Promise<void> {
-  const processor = options.processor ?? runItineraryExtractionProcessor;
+  const router = options.router ?? routeItineraryExtractionJob;
   const log = options.log ?? (() => {});
   return async (event) => {
     const eventId = safeEventId(event?.id);
@@ -114,37 +92,33 @@ export function createItineraryExtractionCreateHandler(options: {
       jobId,
     };
     try {
-      await processor(
+      const result = await router(
         {tripId, jobId},
         options.createDependencies(),
-        (processorEvent, processorFields) => log(
+        (routerEvent, routerFields) => log(
           "info",
-          processorEvent,
-          {...processorFields, ...fields},
+          routerEvent,
+          {...routerFields, ...fields},
         ),
       );
+      if (result.outcome === "non_retryable") {
+        log("error", "itinerary-extraction-trigger-non-retryable", {
+          ...fields,
+          outcome: result.outcome,
+          reason: result.reason,
+          extractionContractVersion: result.extractionContractVersion,
+          selectedProcessorRoute: result.route,
+        });
+        return;
+      }
       log("info", "itinerary-extraction-trigger-handled", {
         ...fields,
-        outcome: "completed",
+        outcome: result.outcome,
+        extractionContractVersion: result.extractionContractVersion,
+        selectedProcessorRoute: result.route,
+        ...(result.failureCode ? {failureCode: result.failureCode} : {}),
       });
     } catch (error) {
-      if (error instanceof ItineraryExtractionProcessorError) {
-        if (error.code === "JOB_NOT_PROCESSABLE") {
-          log("info", "itinerary-extraction-trigger-handled", {
-            ...fields,
-            outcome: "no-op",
-          });
-          return;
-        }
-        if (isFinalizedBusinessFailure(error)) {
-          log("info", "itinerary-extraction-trigger-handled", {
-            ...fields,
-            outcome: "terminal-failure",
-            failureCode: error.failureCode,
-          });
-          return;
-        }
-      }
       log("error", "itinerary-extraction-trigger-failed", {
         ...fields,
         outcome: "infrastructure-error",
@@ -168,13 +142,9 @@ const productionLog: ItineraryExtractionTriggerLog = (
 };
 
 const productionHandler = createItineraryExtractionCreateHandler({
-  createDependencies: () => adminItineraryExtractionProcessorDependencies(
+  createDependencies: () => adminExtractionProcessorRouterDependencies(
     getFirestore(),
     getStorage().bucket(),
-    (event, fields) => productionLog("info", event, {
-      functionName: itineraryExtractionTriggerFunctionName,
-      ...fields,
-    }),
   ),
   log: productionLog,
 });
@@ -184,23 +154,13 @@ export const processItineraryExtractionJob = onDocumentCreated(
   async (event) => productionHandler({id: event.id, params: event.params}),
 );
 
-function isFinalizedBusinessFailure(
-  error: ItineraryExtractionProcessorError,
-): boolean {
-  return error.failureCode !== null && [
-    "SOURCE_FAILURE",
-    "EXTRACTION_PROVIDER_FAILED",
-    "INVALID_EXTRACTION_RESULT",
-    "DRAFT_PERSISTENCE_FAILED",
-  ].includes(error.code);
-}
-
 function safeEventId(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
 function safeErrorCategory(error: unknown): string {
   if (error instanceof ItineraryExtractionProcessorError) return error.code;
+  if (error instanceof SupplierExtractionProcessorError) return error.code;
   if (error instanceof Error && error.name.length > 0) return error.name;
   return "unknown";
 }

@@ -1,5 +1,7 @@
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const {
   adminGeminiItineraryExtractionProvider,
 } = require('../lib/itineraryExtraction/geminiProviderAdmin');
@@ -28,7 +30,7 @@ const dependencies = Object.freeze({
   provider: Object.freeze({}),
 });
 
-function triggerFixture(processor) {
+function triggerFixture(router) {
   const calls = [];
   const logs = [];
   let dependencyCalls = 0;
@@ -37,9 +39,9 @@ function triggerFixture(processor) {
       dependencyCalls += 1;
       return dependencies;
     },
-    async processor(input, actualDependencies, log) {
+    async router(input, actualDependencies, log) {
       calls.push({input, dependencies: actualDependencies, log});
-      return processor(input, actualDependencies, log);
+      return router(input, actualDependencies, log);
     },
     log: (level, event, fields) => logs.push({level, event, ...fields}),
   });
@@ -59,9 +61,9 @@ const validEvent = (overrides = {}) => ({
 
 test('valid path identities invoke the processor exactly once', async () => {
   const f = triggerFixture(async () => ({
-    jobId: 'job-1',
-    draftId: 'draft-1',
-    status: 'completed',
+    outcome: 'completed',
+    route: 'itinerary_draft_v1',
+    extractionContractVersion: 'itinerary_draft_v1',
   }));
   await f.handler(validEvent());
   assert.equal(f.calls.length, 1);
@@ -73,9 +75,9 @@ test('valid path identities invoke the processor exactly once', async () => {
 
 test('event snapshot fields are never used as authoritative job input', async () => {
   const f = triggerFixture(async () => ({
-    jobId: 'job-1',
-    draftId: 'draft-1',
-    status: 'completed',
+    outcome: 'completed',
+    route: 'itinerary_draft_v1',
+    extractionContractVersion: 'itinerary_draft_v1',
   }));
   await f.handler(validEvent({
     data: {
@@ -121,41 +123,48 @@ test('missing event fails safely before processor creation', async () => {
   assert.equal(f.logs.at(-1).outcome, 'infrastructure-error');
 });
 
-for (const status of ['processing', 'completed', 'failed']) {
-  test(`${status} duplicate is an expected successful no-op`, async () => {
-    const f = triggerFixture(async () => {
-      throw new ItineraryExtractionProcessorError(
-        'JOB_NOT_PROCESSABLE',
-        'Job has already been claimed or finalized.',
-      );
-    });
+for (const outcome of [
+  'completed',
+  'already_completed',
+  'already_processing',
+  'no_op',
+]) {
+  test(`${outcome} router outcome is handled successfully`, async () => {
+    const f = triggerFixture(async () => ({
+      outcome,
+      route: 'supplier_extraction_v1',
+      extractionContractVersion: 'supplier_extraction_v1',
+    }));
     assert.equal(await f.handler(validEvent()), undefined);
     assert.equal(f.calls.length, 1);
-    assert.equal(f.logs.at(-1).outcome, 'no-op');
+    assert.equal(f.logs.at(-1).outcome, outcome);
   });
 }
 
-for (const [processorCode, failureCode] of [
-  ['SOURCE_FAILURE', 'source_unavailable'],
-  ['SOURCE_FAILURE', 'unsupported_source'],
-  ['EXTRACTION_PROVIDER_FAILED', 'extraction_failed'],
-  ['INVALID_EXTRACTION_RESULT', 'invalid_extraction_result'],
-  ['DRAFT_PERSISTENCE_FAILED', 'draft_persistence_failed'],
-]) {
-  test(`${failureCode} finalized business failure is handled`, async () => {
-    const f = triggerFixture(async () => {
-      throw new ItineraryExtractionProcessorError(
-        processorCode,
-        'Sanitized terminal business failure.',
-        failureCode,
-      );
-    });
-    assert.equal(await f.handler(validEvent()), undefined);
-    assert.equal(f.calls.length, 1);
-    assert.equal(f.logs.at(-1).outcome, 'terminal-failure');
-    assert.equal(f.logs.at(-1).failureCode, failureCode);
-  });
-}
+test('terminal business outcome is handled without trigger retry', async () => {
+  const f = triggerFixture(async () => ({
+    outcome: 'terminal_failure',
+    route: 'supplier_extraction_v1',
+    extractionContractVersion: 'supplier_extraction_v1',
+    failureCode: 'extraction_failed',
+  }));
+  assert.equal(await f.handler(validEvent()), undefined);
+  assert.equal(f.logs.at(-1).outcome, 'terminal_failure');
+  assert.equal(f.logs.at(-1).failureCode, 'extraction_failed');
+});
+
+test('deterministic routing failure is logged and handled without retry', async () => {
+  const f = triggerFixture(async () => ({
+    outcome: 'non_retryable',
+    route: null,
+    extractionContractVersion: null,
+    reason: 'invalid_job_contract',
+  }));
+  assert.equal(await f.handler(validEvent()), undefined);
+  assert.equal(f.logs.at(-1).level, 'error');
+  assert.equal(f.logs.at(-1).outcome, 'non_retryable');
+  assert.equal(f.logs.at(-1).reason, 'invalid_job_contract');
+});
 
 test('failure-finalization infrastructure error is rethrown', async () => {
   const failure = new ItineraryExtractionProcessorError(
@@ -277,4 +286,17 @@ test('Functions entrypoint preserves callables and exports the trigger', () => {
     entrypoint.processItineraryExtractionJob,
     processItineraryExtractionJob,
   );
+});
+
+test('repository defines only one extraction Firestore trigger identity', () => {
+  const sourceRoot = path.resolve(__dirname, '../src');
+  const files = fs.readdirSync(path.join(sourceRoot, 'itineraryExtraction'))
+    .filter((name) => name.endsWith('.ts'))
+    .map((name) => fs.readFileSync(
+      path.join(sourceRoot, 'itineraryExtraction', name),
+      'utf8',
+    ));
+  const declarations = files.reduce((count, source) =>
+    count + (source.match(/onDocumentCreated\s*\(/g) ?? []).length, 0);
+  assert.equal(declarations, 1);
 });
