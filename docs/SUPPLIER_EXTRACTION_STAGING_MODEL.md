@@ -538,7 +538,7 @@ Use an **immutable extraction snapshot plus separate mutable resolution state**.
 - Stores consultant mappings, corrections, routing and exclusions.
 - Uses optimistic revision/version checks to avoid lost updates.
 - Emits append-only audit events for material decisions.
-- Can be marked superseded when a consultant starts from a newer extraction.
+- Remains attached to its own snapshot when a newer extraction is created.
 - Becomes sealed when finalization succeeds; later work creates a new resolution
   revision or normal canonical draft history rather than rewriting the sealed
   outcome.
@@ -546,9 +546,9 @@ Use an **immutable extraction snapshot plus separate mutable resolution state**.
 ### 16.3 Reruns and revisions
 
 A rerun never mutates the earlier snapshot or resolution. The UI may compare
-new and previous facts by semantic content and provenance, but automatic carry
-forward is limited to decisions that still match unambiguously. Ambiguous
-carry-forward becomes a review issue.
+new and previous facts by semantic content and provenance, but no decision is
+carried forward automatically. A future assisted migration must be an explicit,
+audited workflow and is outside this contract.
 
 This pattern preserves audit history, supports comparison and keeps consultant
 edits distinct from machine claims. It also lets reusable itineraries retain
@@ -610,11 +610,12 @@ server-created and immutable to clients. The provider cannot write Firestore.
 Only the trusted processor may create a complete snapshot and link it to the
 claimed job.
 
-Consultant resolution documents may eventually allow owner/Admin client writes,
-but rules must restrict those writes to resolution fields and valid state
-transitions. Clients cannot change the base extraction, source references,
-machine facts, IDs, creator metadata or audit timestamps. Append-only audit
-events and finalization should be written by trusted backend code.
+Consultant resolution mutations use trusted callable backend commands. Future
+Rules may permit owner/Admin reads, but direct client creates, updates and
+deletes remain denied. Clients cannot change the base extraction, source
+references, machine facts, IDs, creator metadata or audit timestamps.
+Append-only audit events and finalization are written only by trusted backend
+code.
 
 Finalization is a callable or internal backend transaction that reloads the
 authoritative snapshot and resolution, verifies Trip access and revision, then
@@ -797,3 +798,610 @@ before full sparse-source finalization is implemented:
 
 These questions do not change the staging entity, one-call provider boundary,
 immutable snapshot lifecycle or consultant resolution design.
+
+## 24. Supplier Import Resolution contract
+
+This section fixes the durable contract between one complete immutable Supplier
+Extraction Snapshot and later canonical finalization. Where earlier sections
+describe optional approaches, this section is authoritative for resolution
+identity, lifecycle, concurrency, writes and rerun isolation. It defines an
+architecture only; no collection, Rule, callable or application model exists
+because of this document.
+
+### 24.1 Aggregate identity and Firestore hierarchy
+
+There is exactly one resolution aggregate for one extraction. Its logical
+`resolutionId` is the immutable `extractionId`, and its document ID is the same
+value. The path is therefore deterministic:
+
+```text
+trips/{tripId}/supplier_extractions/{extractionId}
+  resolutions/{extractionId}
+    decisions/{decisionId}
+    manual_items/{manualItemId}
+    events/{eventId}
+```
+
+The repeated ID is intentional. It prevents a second current resolution from
+being allocated beneath the same snapshot and makes a cross-snapshot reference
+detectable without a query. `decisions` stores sparse typed decisions against
+Snapshot entities. `manual_items` stores the small amount of genuinely
+consultant-authored day or service content that has no Snapshot entity.
+`events` is the append-only audit log.
+
+Decision IDs are deterministic within the aggregate:
+
+- `title` for the title decision;
+- the exact `staged-day-N`, `staged-service-N`, `package-fact-N`,
+  `ancillary-flight-N`, `ancillary-visa-N` or `review-N` target ID for an
+  entity decision.
+
+Snapshot IDs are unique across their entity prefixes. A decision document must
+also store its controlled `decisionKind` and target ID, and the backend verifies
+that both agree with the document ID and the authoritative Snapshot entity.
+Manual IDs use separate server-owned prefixes such as `consultant-day-...` and
+`consultant-service-...`; they can never be interpreted as machine IDs.
+
+The resolution is never moved, shared or reused across Trips or extractions. A
+new extraction job and Snapshot create a new independent resolution path even
+when the source package is unchanged.
+
+### 24.2 Resolution root
+
+The compact root has an exact, versioned shape:
+
+```text
+SupplierImportResolution
+  schemaVersion: supplier_import_resolution_v1
+  resolutionId: extractionId
+  tripId
+  extractionId
+  sourcePackageId
+  snapshotSchemaVersion: supplier_extraction_snapshot_v1
+  status: active | finalized
+  revision: positive integer
+  createdByUid
+  createdAt: server timestamp
+  updatedByUid
+  updatedAt: server timestamp
+  finalizedByUid: UID | null
+  finalizedAt: server timestamp | null
+  resultingDraftId: itinerary draft ID | null
+```
+
+The linkage, schema, creator and creation timestamp are immutable. Current Trip
+ownership is not copied into the root because ownership may be reassigned; each
+read and mutation uses the authoritative parent Trip. The root does not embed
+the Snapshot, decisions, audit history or a mutable readiness flag.
+
+The first accepted `open_review` command creates the root at revision `1` and
+appends the matching `0 -> 1` audit event. A repeated open returns the existing
+aggregate. There is no separately stored `not_started` state: absence of the
+root means review has not started.
+
+### 24.3 Lifecycle and readiness
+
+Only two lifecycle states are persisted:
+
+- `active`: consultant decisions may be changed through trusted commands;
+- `finalized`: canonical output was committed and the resolution is locked.
+
+`ready_to_finalize` is derived, never persisted. It could become stale whenever
+a decision changes. `in_review` is equivalent to an existing `active` root and
+does not need another value. There is no `superseded` state in this contract;
+reruns are isolated by their parent extraction. A product view may label an old
+active resolution as belonging to an older extraction without mutating it.
+
+### 24.4 References, decisions and sparse field overrides
+
+References are discriminated rather than bare IDs where both origins are valid:
+
+```text
+DayReference =
+  { kind: staged_day, dayId }
+  | { kind: consultant_day, manualDayId }
+
+ServiceReference =
+  { kind: staged_service, serviceId }
+  | { kind: consultant_service, manualServiceId }
+```
+
+Every decision child has these common server-validated fields:
+
+```text
+decisionKind
+targetEntityId
+disposition
+overrides: exact typed override object
+lastRevision
+updatedByUid
+updatedAt
+```
+
+The concrete decision kind defines the only permitted disposition and override
+fields. Arbitrary field paths and `Map<String, dynamic>` patches are forbidden.
+The document contains decisions and references, not a mutable copy of its
+Snapshot target.
+
+An optional field override uses a closed union:
+
+```text
+FieldOverride<T> =
+  { operation: set, value: T }
+  | { operation: clear }
+```
+
+The four meaningful states are therefore unambiguous:
+
+- no decision document or no override member: untouched source proposal;
+- `retain`/`accept` with no override: explicitly accepted unchanged;
+- `set`: consultant-authored correction;
+- `clear`: consultant intentionally removed an optional source value.
+
+Required canonical fields cannot be cleared. List fields use `set` with a full
+typed replacement list or `clear`; list-element patch paths are not accepted.
+All override text uses the same normalization and commercial-value rejection as
+the Snapshot unless a later dedicated commercial domain owns the field.
+
+### 24.5 Title and staged-day decisions
+
+The title decision has `accept` or `override`. `override` requires one normalized
+non-commercial title value. An absent title decision leaves the suggested title
+untouched; it does not claim that the consultant accepted it.
+
+A staged-day decision references one `staged-day-N` and has:
+
+```text
+disposition: retain | exclude
+canonicalOrder: positive integer | absent
+overrides:
+  date: FieldOverride<YYYY-MM-DD> | absent
+  title: FieldOverride<string> | absent
+  summary: FieldOverride<string> | absent
+  notes: FieldOverride<string> | absent
+exclusionReason: ExclusionReason | null
+exclusionNote: string | null
+```
+
+An absent decision retains the staged day and its source order as an untouched
+proposal. A retained day may change canonical order and supported canonical
+fields. `sourceDayNumber` is evidence and is never overridden; final canonical
+day numbers come from resolved order. Clearing `date`, `summary` or `notes` is
+allowed. A retained canonical day must end with a valid title, so title cannot
+be cleared without a replacement.
+
+Canonical order is the explicit override when present and otherwise the
+Snapshot order. Retained and manual days must resolve to unique positive order
+values; gaps are allowed in working state and are renumbered contiguously only
+in the final canonical payload. A reorder command may update several day
+decisions in one revision. Excluding a day is invalid while a retained service
+still targets it.
+
+The controlled `ExclusionReason` values are:
+
+```text
+duplicate
+extracted_in_error
+irrelevant_supplier_content
+not_part_of_requested_itinerary
+replaced_by_consultant_content
+other
+```
+
+`other` requires a concise consultant note. Absence of a canonical destination
+is never a valid exclusion reason by itself.
+
+### 24.6 Assigned and unassigned service decisions
+
+One `service` decision shape serves both Snapshot scopes:
+
+```text
+disposition: retain | exclude
+day: DayReference | absent
+canonicalOrder: positive integer | absent
+overrides: ServiceOverrides
+exclusionReason: ExclusionReason | null
+exclusionNote: string | null
+```
+
+For an assigned service, no decision means retain it on its source day at its
+source order. A `retain` decision with no day or field override explicitly
+accepts that mapping. Supplying a day moves it to another retained staged or
+manual day. Supplying `canonicalOrder` changes its order within that day.
+
+An unassigned service is unresolved until a `retain` decision supplies a valid
+day and order, or an `exclude` decision supplies a controlled reason. Opening
+the review workspace never infers a day. Moving an assigned service and
+assigning an unassigned service preserve the original Snapshot fact and trusted
+provenance.
+
+`ServiceOverrides` has only these typed members:
+
+- common fields: `serviceType`, `title`, `description`, `startTime`, `endTime`,
+  `location`, `city`, `inclusions`, `exclusions` and `notes`;
+- hotel fields: `hotelName`, `city`, `orSimilar`, `checkInDate`,
+  `checkOutDate`, `nightCount`, `roomType`, `mealPlan`, `numberOfRooms` and
+  `supplierStarRating`;
+- transfer fields: `pickup`, `dropoff`, `vehicleType` and `transferType`;
+- activity fields: `activityName`, `duration` and `activityType`.
+
+The enum vocabularies remain those of the Snapshot. Overrides must produce one
+valid canonical classification and compatible detail branch. Changing a type
+does not silently discard incompatible extracted details; those details must be
+explicitly cleared, mapped to supported content or remain a blocker. Likewise,
+staged service conditions or structured attributes not supported by the chosen
+canonical destination cannot silently disappear.
+
+Within one resolved day, effective service orders must be unique. Untouched
+assigned services use their Snapshot order; moved, unassigned and manual
+services require an explicit order. A cohesive reorder mutation may rewrite all
+affected service order decisions atomically, after which finalization assigns
+the canonical list order.
+
+### 24.7 Package accommodation decisions
+
+`package_accommodation` decisions support exactly:
+
+```text
+disposition:
+  map_to_day_service | retain_package_level | exclude
+day: DayReference | null
+canonicalOrder: positive integer | null
+overrides: AccommodationOverrides
+exclusionReason: ExclusionReason | null
+exclusionNote: string | null
+```
+
+`map_to_day_service` requires a retained day and service order, and produces one
+hotel service rather than nightly duplicates. `AccommodationOverrides` mirrors
+the exact staged hotel fields using sparse `FieldOverride` values. Dates are
+never derived from day dates, Trip dates or night count. A consultant-set
+check-in or check-out date is explicitly marked by its `set` operation and
+captured by the audit event.
+
+`retain_package_level` preserves the accommodation as package-wide reviewed
+content. It can permit finalization only when a deployed canonical destination
+supports every retained field. With today's `KayraItineraryDraft`, fields such
+as package scope, `orSimilar` and an undated `nightCount` have no lossless root
+home, so the assessment remains blocked. `exclude` requires an auditable reason.
+
+### 24.8 Package statement and condition decisions
+
+Package inclusions and exclusions use a `package_statement` decision;
+conditions use `package_condition`. Their dispositions are:
+
+```text
+retain_package_level
+map_to_service
+exclude
+```
+
+`map_to_service` requires a valid retained `ServiceReference` and a controlled
+destination compatible with the fact:
+
+```text
+service_inclusion | service_exclusion | service_notes |
+transfer_vehicle_type | transfer_type
+```
+
+The finalizer rejects an incompatible pair, such as mapping an exclusion to
+`service_inclusion` or a guide condition to `transfer_type`. Sparse typed
+overrides may correct category, text, quantity, frequency, applicability,
+condition kind or condition value. They do not copy unchanged Snapshot values.
+
+`retain_package_level` keeps the fact at package scope and is ready only when a
+supported canonical package-content destination exists. Important package
+facts therefore remain blockers against today's draft schema unless safely
+mapped or deliberately excluded. They are never forced into an arbitrary day.
+
+### 24.9 Ancillary flight and visa decisions
+
+Flights remain ancillary. A `flight` decision supports:
+
+```text
+route_to_flight_workflow | handled_separately | exclude
+```
+
+`route_to_flight_workflow` records the supported destination identity when that
+workflow exists. `handled_separately` is an explicit consultant disposition
+that allows land-itinerary finalization without pretending the flight became a
+service. Typed sparse overrides may correct only the existing non-commercial
+flight fields and conditions. Fare, PNR, payment and ticketing values are not
+part of this resolution contract.
+
+A `visa` decision supports:
+
+```text
+route_to_visa_workflow | handled_separately | exclude
+```
+
+Its sparse overrides are limited to the existing controlled visa disposition
+and non-commercial text. Visa pricing is forbidden. A route is complete only
+when the named workflow exists and accepts the fact; otherwise the assessment
+keeps it blocked or the consultant must choose an honest handled-separately or
+exclusion decision.
+
+### 24.10 Commercial-presence treatment
+
+`commercial_presence` is informational. It has no decision document, does not
+block land-itinerary finalization and is never copied to canonical itinerary
+content. The review UI may display its controlled categories and direct the
+consultant to the separate pricing workflow, but viewing it creates no
+acknowledgement state. Resolution and audit schemas contain no amount, currency,
+price, supplement value, markup, margin, discount, payment value or raw pricing
+text field.
+
+### 24.11 Review-issue decisions
+
+Absence of a `review_issue` decision means the issue remains open. Viewing an
+issue never writes a decision. The controlled outcomes are:
+
+```text
+acknowledged | resolved | overridden
+```
+
+- `acknowledged` is permitted only for a warning whose
+  `resolutionRequired` is false. It records that the consultant saw a
+  non-blocking uncertainty; it does not change the Snapshot issue.
+- `resolved` requires one or more decision/manual-item references whose current
+  state concretely addresses the issue target and code. The server validates
+  those references rather than trusting a free-text assertion.
+- `overridden` is exceptional. It requires a controlled reason and concise
+  note, is auditable, and may not make an invalid canonical result valid.
+
+`chronology_unknown`, `accommodation_span_unknown`,
+`classification_ambiguous`, `conflicting_dates`, `global_mapping_required` and
+`source_conflict` require a concrete mapping, correction, routing or exclusion;
+they cannot be dismissed by acknowledgement. For the initial contract, only an
+`other` warning or blocker may use `overridden`, and only when server policy
+confirms that no fact would be lost. Expanding that allowlist requires a schema
+or policy review. Any issue with `resolutionRequired: true` must be `resolved`
+or validly `overridden`, regardless of warning severity.
+
+### 24.12 Consultant-authored days and services
+
+Manual days and services are allowed because a sparse source may require human
+structure that has no machine entity. They live in `manual_items` as a strict
+union, never inside a Snapshot decision:
+
+```text
+ConsultantDay
+  itemKind: consultant_day
+  manualDayId
+  canonicalOrder
+  date: YYYY-MM-DD | null
+  title
+  summary: string | null
+  notes: string | null
+  createdByUid, createdAt, updatedByUid, updatedAt, lastRevision
+
+ConsultantService
+  itemKind: consultant_service
+  manualServiceId
+  day: DayReference
+  canonicalOrder
+  complete canonical service fields and compatible typed details
+  createdByUid, createdAt, updatedByUid, updatedAt, lastRevision
+```
+
+Their IDs are server-owned and their origin is always `consultant`; they contain
+no Supplier Source provenance. If content corrects a Snapshot entity, a sparse
+override is used instead. Removing a manual day is invalid while a retained
+service targets it. Removing a manual item writes an audit event; it does not
+delete or alter Snapshot evidence.
+
+### 24.13 Pure finalization assessment
+
+`canFinalize(snapshot, resolution)` is deterministic and has no UI state, clock
+dependency or AI call. It returns an ephemeral typed result:
+
+```text
+FinalizationAssessment
+  resolutionId
+  evaluatedRevision
+  canFinalize
+  blockers: FinalizationFinding[]
+  warnings: FinalizationFinding[]
+
+FinalizationFinding
+  code: controlled enum
+  targetKind
+  targetId: ID | null
+```
+
+The finding contains stable codes and references, not copied source text. The
+UI supplies localized explanation from those codes.
+
+Mandatory blockers include:
+
+- invalid resolution/Snapshot linkage, schema, target or cross-reference;
+- any unassigned service without a valid assignment or exclusion;
+- any retained service targeting a missing or excluded day;
+- duplicate or invalid effective day/service ordering;
+- any retained service lacking the type, title or typed fields required by its
+  selected canonical destination;
+- incompatible or conflicting overrides, including date ranges;
+- any package accommodation without a supported mapping, package destination
+  or exclusion;
+- any important package inclusion, exclusion or condition without a supported
+  disposition;
+- any flight or visa fact without a supported route, handled-separately choice
+  or exclusion;
+- any blocker or `resolutionRequired` issue that is still open, merely
+  acknowledged or invalidly overridden;
+- any unresolved chronology, date conflict, classification or relationship;
+- any retained staging field that the selected canonical destination would
+  silently discard;
+- invalid or incomplete manual content; and
+- failure of the existing canonical draft validator after deterministic
+  assembly.
+
+Warnings may remain when they concern optional source detail, non-critical
+wording ambiguity, a missing source label with trusted file provenance, or
+another warning with `resolutionRequired: false`. They do not require a write
+unless the consultant chooses to acknowledge them. Acknowledgement is preserved
+in audit history but does not erase the original issue. Commercial presence is
+informational and is absent from both blocker and acknowledgement requirements.
+
+Untouched valid assigned days and services do not require ceremonial acceptance
+documents. They flow through the deterministic default mapping unless a review
+issue or unsupported field makes that mapping unsafe. This keeps ordinary
+well-structured supplier itineraries practical while preventing silent loss in
+sparse sources.
+
+### 24.14 Optimistic concurrency and audit events
+
+Every mutating command carries:
+
+```text
+tripId
+extractionId
+expectedRevision
+commandId
+typed command payload
+```
+
+`commandId` is a validated idempotency identity and becomes the audit event ID.
+Reusing it with the same actor and command returns the recorded result; reusing
+it with different content is rejected. A stale `expectedRevision` returns a
+stable `resolution_conflict` result with the current revision and performs no
+write.
+
+An audit event has this exact conceptual envelope:
+
+```text
+eventId
+resolutionId
+extractionId
+previousRevision
+resultingRevision
+actorUid
+occurredAt: server timestamp
+action: controlled AuditAction
+targetKind
+targetId: ID | null
+metadata: typed metadata for that AuditAction
+```
+
+Audit actions cover opening review, setting/reverting title, day, service,
+package, ancillary and issue decisions, reordering, adding/updating/removing a
+manual item, and finalizing. Metadata records controlled dispositions,
+references, reason codes and changed field names. It stores consultant-authored
+before/after override values only when needed to audit the correction and after
+the same semantic/commercial validation. It never copies unchanged supplier
+descriptions, Snapshot provenance arrays, file paths, source text or commercial
+values. Events are never updated or deleted.
+
+Each accepted command runs one Firestore transaction that:
+
+1. authenticates an active company user and verifies current Trip owner/Admin
+   access;
+2. reloads the authoritative complete Snapshot and exact resolution linkage;
+3. rejects a finalized resolution;
+4. verifies `expectedRevision == resolution.revision`;
+5. verifies command idempotency, target existence and semantic validity;
+6. writes the affected root, decision and/or manual-item documents;
+7. increments the root revision exactly once and updates server-owned audit
+   metadata; and
+8. creates exactly one append-only event with matching previous/resulting
+   revisions.
+
+There is no successful decision mutation without its event, and no event for a
+rejected mutation. Child documents carry `lastRevision`; because every child
+write and event also updates the root revision atomically, a finalizer that has
+loaded revision `R` can reject any concurrent change by rechecking the root at
+commit time.
+
+### 24.15 Server command surface and security
+
+All mutation writes use the Admin SDK behind authenticated callable Functions.
+Direct Firestore resolution writes are denied, including for Admins. Future
+Rules may allow active Trip owners and active Admins to read the root,
+decisions, manual items and events; all access remains scoped through the parent
+Trip. A former owner loses access after reassignment, and the new owner gains it
+through the current Trip relationship. Resolution state is private Trip state
+and never a cross-agent reusable source.
+
+Use one callable with a closed command union for ordinary mutations:
+
+```text
+applySupplierImportResolutionMutation
+  open_review
+  set_title_decision
+  set_day_decision
+  set_day_order
+  set_service_decision
+  set_service_order
+  set_package_fact_decision
+  set_ancillary_decision
+  set_review_issue_decision
+  upsert_manual_day
+  remove_manual_day
+  upsert_manual_service
+  remove_manual_service
+  revert_decision
+```
+
+This keeps authorization, revision and audit behavior in one implementation
+without accepting an arbitrary patch. The discriminator selects a strict input
+schema and domain handler.
+
+Use a separate `finalizeSupplierImport` callable. Finalization has a distinct
+contract: it loads the whole aggregate, computes the pure assessment, assembles
+and validates canonical output, and commits the result. Keeping it separate
+prevents an ordinary item mutation from smuggling canonical writes.
+
+### 24.16 Finalization transaction and locked boundary
+
+The finalizer first reads the immutable Snapshot plus all current resolution
+children at revision `R`, computes `canFinalize`, builds the canonical payload
+and passes it through the existing strict canonical validator. If the result is
+ready, one transaction rechecks authorization, complete Snapshot identity,
+`active` status and root revision `R`. It then:
+
+- creates or updates the intended canonical draft using backend-owned IDs and
+  timestamps;
+- sets resolution status to `finalized`;
+- increments revision to `R + 1`;
+- records `resultingDraftId`, `finalizedByUid` and `finalizedAt`; and
+- appends the matching finalization event.
+
+If any check changes, no canonical or resolution write commits. Once finalized,
+every normal mutation command returns `resolution_finalized`. Later itinerary
+editing belongs to canonical draft/version history. It never reopens the
+resolution, rewrites the Snapshot or edits prior events.
+
+### 24.17 Reruns and canonical package-content neutrality
+
+A rerun creates a new extraction job, new Snapshot and new deterministic
+resolution identity. Earlier decisions are neither copied nor applied. A future
+comparison or assisted-migration feature must be explicit, revalidate every
+target against the new Snapshot and write new audit events; it is out of scope.
+
+There is not enough evidence to choose whether reviewed package-wide content
+belongs in a future expanded `KayraItineraryDraft` schema or an adjacent
+canonical itinerary-content entity. The current draft is day-centric and has no
+lossless root accommodation, inclusion, exclusion or condition fields. Forcing
+those facts into it would destroy the scope this staging architecture exists to
+preserve.
+
+The resolution therefore records the semantic destination
+`retain_package_level` without naming a collection or copying the fact. The
+finalization assessment treats that decision as blocked until a deployed,
+versioned canonical destination supports the fact. This keeps the contract
+compatible with either future choice and prevents documentation from implying
+that package content can already be finalized into today's draft.
+
+The remaining decisions before implementation are limited to:
+
+1. the versioned canonical home for package-wide reviewed content;
+2. the concrete canonical flight and visa workflow identities used by routed
+   decisions;
+3. the final storage shape for fact-to-canonical-field lineage when one output
+   field has multiple Snapshot sources; and
+4. explicit operational size limits for one resolution and one finalization
+   transaction, aligned with provider and Firestore bounds.
+
+None of these questions changes resolution identity, callable-only mutations,
+revision conflict handling, append-only auditing, rerun isolation or Snapshot
+immutability.
