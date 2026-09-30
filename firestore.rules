@@ -440,10 +440,28 @@ service cloud.firestore {
         allow create, update, delete: if false;
       }
 
-      // Reserved for a later consultant-resolution design. No client access
-      // is granted until that mutable boundary is implemented deliberately.
-      match /resolutions/{document=**} {
-        allow read, write: if false;
+      match /resolutions/{resolutionId} {
+        allow get, list: if canReadSupplierExtraction(tripId, extractionId)
+          && resolutionId == extractionId;
+        allow create, update, delete: if false;
+
+        match /decisions/{decisionId} {
+          allow get, list: if canReadSupplierExtraction(tripId, extractionId)
+            && resolutionId == extractionId;
+          allow create, update, delete: if false;
+        }
+
+        match /manual_items/{manualItemId} {
+          allow get, list: if canReadSupplierExtraction(tripId, extractionId)
+            && resolutionId == extractionId;
+          allow create, update, delete: if false;
+        }
+
+        match /events/{eventId} {
+          allow get, list: if canReadSupplierExtraction(tripId, extractionId)
+            && resolutionId == extractionId;
+          allow create, update, delete: if false;
+        }
       }
     }
 

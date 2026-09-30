@@ -13,7 +13,10 @@ const _root = 'trips/trip-1/supplier_extractions/extraction-1';
 const _day = '$_root/days/staged-day-1';
 const _fact = '$_root/facts/staged-service-1';
 const _issue = '$_root/review_issues/review-1';
-const _resolution = '$_root/resolutions/resolution-1';
+const _resolution = '$_root/resolutions/extraction-1';
+const _decision = '$_resolution/decisions/staged-day-1';
+const _manual = '$_resolution/manual_items/consultant-day-1';
+const _event = '$_resolution/events/command-1';
 
 void main() {
   group(
@@ -33,7 +36,10 @@ void main() {
           _day: _child('staged-day-1'),
           _fact: _child('staged-service-1'),
           _issue: _child('review-1'),
-          _resolution: {'status': 'draft'},
+          _resolution: {'status': 'active'},
+          _decision: {'decisionKind': 'day'},
+          _manual: {'itemKind': 'consultant_day'},
+          _event: {'action': 'open_review'},
           'trips/trip-1/supplier_extractions/writing': _extraction(
             extractionId: 'writing',
             persistenceState: 'writing',
@@ -126,11 +132,56 @@ void main() {
         await emulator.expectDelete(_issue, uid: 'admin-1', allowed: false);
       });
 
-      test('reserved resolutions namespace denies reads and writes', () async {
-        await emulator.expectRead(_resolution, uid: 'admin-1', allowed: false);
-        await emulator.expectCreate(
-          '$_root/resolutions/client-created',
-          {'status': 'draft'},
+      test('owner and Admin can read resolution root and children', () async {
+        for (final uid in ['agent-1', 'admin-1']) {
+          for (final path in [_resolution, _decision, _manual, _event]) {
+            await emulator.expectRead(path, uid: uid, allowed: true);
+          }
+        }
+      });
+
+      test('other, inactive and unauthenticated users cannot read resolution', () async {
+        for (final path in [_resolution, _decision, _manual, _event]) {
+          await emulator.expectRead(path, uid: 'agent-2', allowed: false);
+        }
+        await emulator.expectRead(_resolution, uid: 'inactive-agent', allowed: false);
+        await emulator.expectRead(_resolution, uid: null, allowed: false);
+      });
+
+      test('resolution root rejects every direct client mutation', () async {
+        for (final uid in ['agent-1', 'admin-1']) {
+          await emulator.expectCreate(
+            '$_root/resolutions/client-created',
+            {'status': 'active'}, uid: uid, allowed: false,
+          );
+          await emulator.expectUpdate(
+            _resolution, {'status': 'finalized'}, uid: uid, allowed: false,
+          );
+          await emulator.expectDelete(_resolution, uid: uid, allowed: false);
+        }
+      });
+
+      test('resolution children reject every owner and Admin mutation', () async {
+        for (final uid in ['agent-1', 'admin-1']) {
+          for (final entry in [
+            (_decision, 'decisions/new', {'decisionKind': 'day'}),
+            (_manual, 'manual_items/new', {'itemKind': 'consultant_day'}),
+            (_event, 'events/new', {'action': 'open_review'}),
+          ]) {
+            await emulator.expectCreate(
+              '$_resolution/${entry.$2}', entry.$3, uid: uid, allowed: false,
+            );
+            await emulator.expectUpdate(
+              entry.$1, {'changed': true}, uid: uid, allowed: false,
+            );
+            await emulator.expectDelete(entry.$1, uid: uid, allowed: false);
+          }
+        }
+      });
+
+      test('wrong deterministic resolution identity cannot be read', () async {
+        await emulator.expectRead(
+          '$_root/resolutions/wrong-extraction',
           uid: 'agent-1',
           allowed: false,
         );
