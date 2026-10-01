@@ -387,9 +387,11 @@ function validateRequest(
   actor: SupplierImportResolutionMutationActor,
   occurredAt: string,
 ): void {
-  if (!safeId(request.tripId) || !safeId(request.extractionId) ||
-      !safeId(request.commandId) || request.commandId.length > 128 ||
-      !safeId(actor.uid) || !Number.isInteger(request.expectedRevision) ||
+  if (!isSupplierImportResolutionIdentifier(request.tripId) ||
+      !isSupplierImportResolutionIdentifier(request.extractionId) ||
+      !isSupplierImportResolutionIdentifier(request.commandId, 128) ||
+      !isSupplierImportResolutionIdentifier(actor.uid) ||
+      !Number.isInteger(request.expectedRevision) ||
       request.expectedRevision < 0 || Number.isNaN(Date.parse(occurredAt))) invalid();
   assertNoTrustedFields(request.mutation);
 }
@@ -414,8 +416,12 @@ function manualId(item: SupplierImportManualItem): string {
   return item.itemKind === "consultant_day" ? item.manualDayId : item.manualServiceId;
 }
 
-function safeId(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0 && value.length <= 256 &&
+export function isSupplierImportResolutionIdentifier(
+  value: unknown,
+  maximumLength = 256,
+): value is string {
+  return typeof value === "string" && value.length > 0 &&
+    value.length <= maximumLength &&
     !value.includes("/") && value !== "." && value !== "..";
 }
 

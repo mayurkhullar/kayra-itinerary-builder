@@ -9,6 +9,12 @@ import {requestExtraction} from "./itineraryExtraction/request";
 import {
   adminExtractionRequestDependencies,
 } from "./itineraryExtraction/requestAdmin";
+import {
+  handleSupplierImportResolutionMutation,
+} from "./itineraryExtraction/supplierImportResolutionMutationCallable";
+import {
+  applySupplierImportResolutionMutationAdmin,
+} from "./itineraryExtraction/supplierImportResolutionMutationAdmin";
 export {
   processItineraryExtractionJob,
 } from "./itineraryExtraction/trigger";
@@ -29,6 +35,23 @@ export const requestItineraryExtraction = onCall(
   async (request) => requestExtraction(
     request,
     () => adminExtractionRequestDependencies(getFirestore()),
+    (event, fields) => logger.info(event, fields),
+  ),
+);
+
+export const applySupplierImportResolutionMutation = onCall(
+  {region: "asia-south2"},
+  async (request) => handleSupplierImportResolutionMutation(
+    request,
+    {
+      mutate: (actor, input) => applySupplierImportResolutionMutationAdmin(
+        getFirestore(),
+        actor,
+        input,
+        new Date(),
+        (event, fields) => logger.info(event, fields),
+      ),
+    },
     (event, fields) => logger.info(event, fields),
   ),
 );
