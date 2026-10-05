@@ -24,6 +24,7 @@ class TripWorkspacePage extends StatefulWidget {
     required this.extractionDependencies,
     required this.currentUserUid,
     required this.onBack,
+    this.onReviewExtraction,
   });
 
   final String tripId;
@@ -34,6 +35,7 @@ class TripWorkspacePage extends StatefulWidget {
   final ItineraryExtractionDependencies extractionDependencies;
   final String currentUserUid;
   final VoidCallback onBack;
+  final ValueChanged<String>? onReviewExtraction;
 
   @override
   State<TripWorkspacePage> createState() => _TripWorkspacePageState();
@@ -131,6 +133,7 @@ class _TripWorkspacePageState extends State<TripWorkspacePage> {
                 supplierRepository: widget.supplierRepository,
                 uploadDependencies: widget.uploadDependencies,
                 extractionDependencies: widget.extractionDependencies,
+                onReviewExtraction: widget.onReviewExtraction,
               ),
             ],
           ],

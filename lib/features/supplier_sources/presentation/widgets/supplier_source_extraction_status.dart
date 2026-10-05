@@ -11,11 +11,13 @@ class SupplierSourceExtractionStatus extends StatelessWidget {
     required this.packageId,
     required this.state,
     required this.onRequest,
+    this.onReviewExtraction,
   });
 
   final String packageId;
   final ItineraryExtractionPackageState state;
   final VoidCallback onRequest;
+  final ValueChanged<String>? onReviewExtraction;
 
   @override
   Widget build(BuildContext context) {
@@ -78,11 +80,28 @@ class SupplierSourceExtractionStatus extends StatelessWidget {
               ? 'Reading supplier itinerary…'
               : 'Building itinerary draft…',
         ),
-        ItineraryExtractionPackageStateKind.completed => _SuccessStatus(
-          label: isSupplierExtraction
-              ? 'Extraction ready for review'
-              : 'Draft ready',
-        ),
+        ItineraryExtractionPackageStateKind.completed =>
+          isSupplierExtraction && onReviewExtraction != null
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const _SuccessStatus(label: 'Extraction ready for review'),
+                    const SizedBox(height: AppSpacing.s8),
+                    OutlinedButton(
+                      key: ValueKey('review-extraction-$packageId'),
+                      onPressed: () => onReviewExtraction!(
+                        effectiveState.resultingExtractionId!,
+                      ),
+                      child: const Text('Review extraction'),
+                    ),
+                  ],
+                )
+              : _SuccessStatus(
+                  label: isSupplierExtraction
+                      ? 'Extraction ready for review'
+                      : 'Draft ready',
+                ),
         ItineraryExtractionPackageStateKind.failed ||
         ItineraryExtractionPackageStateKind.error => _FailureStatus(
           packageId: packageId,

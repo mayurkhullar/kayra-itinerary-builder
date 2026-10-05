@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../../core/layout/app_layout.dart';
 import '../../../trips/data/trip_repository.dart';
 import '../../../itineraries/data/itinerary_extraction_dependencies.dart';
+import '../../../itineraries/presentation/controllers/supplier_import_review_dependencies.dart';
+import '../../../itineraries/presentation/pages/supplier_import_review_page.dart';
 import '../../../../shared/widgets/kayra_app_header.dart';
 import '../../../clients/data/client_repository.dart';
 import '../../../suppliers/data/supplier_repository.dart';
@@ -30,6 +32,7 @@ class DashboardPage extends StatefulWidget {
     this.supplierSourceRepository,
     this.supplierSourceUploadDependencies,
     this.itineraryExtractionDependencies,
+    this.supplierImportReviewDependencies,
   });
 
   final KayraUser user;
@@ -42,6 +45,7 @@ class DashboardPage extends StatefulWidget {
   final SupplierSourceRepository? supplierSourceRepository;
   final SupplierSourceUploadDependencies? supplierSourceUploadDependencies;
   final ItineraryExtractionDependencies? itineraryExtractionDependencies;
+  final SupplierImportReviewDependencies? supplierImportReviewDependencies;
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
@@ -52,6 +56,12 @@ enum _WorkspacePage { myTrips, clients, suppliers, admin }
 class _DashboardPageState extends State<DashboardPage> {
   _WorkspacePage _page = _WorkspacePage.myTrips;
   String? _selectedTripId;
+  String? _selectedExtractionId;
+  SupplierImportReviewDependencies? _defaultReviewDependencies;
+  SupplierImportReviewDependencies get _reviewDependencies =>
+      widget.supplierImportReviewDependencies ??
+      (_defaultReviewDependencies ??=
+          SupplierImportReviewDependencies.firebase());
   late final ClientRepository _clients =
       widget.clientRepository ?? FirestoreClientRepository();
 
@@ -99,17 +109,20 @@ class _DashboardPageState extends State<DashboardPage> {
         (_page == _WorkspacePage.admin && !widget.user.isActiveAdmin)) {
       _page = _WorkspacePage.myTrips;
       _selectedTripId = null;
+      _selectedExtractionId = null;
     }
   }
 
   void _showMyTrips() => setState(() {
     _page = _WorkspacePage.myTrips;
     _selectedTripId = null;
+    _selectedExtractionId = null;
   });
 
   void _showPage(_WorkspacePage page) => setState(() {
     _page = page;
     _selectedTripId = null;
+    _selectedExtractionId = null;
   });
 
   void _showUnavailableMessage(BuildContext context) {
@@ -158,16 +171,31 @@ class _DashboardPageState extends State<DashboardPage> {
                   : _page == _WorkspacePage.suppliers
                   ? SuppliersPage(currentUser: user, repository: _suppliers)
                   : _selectedTripId != null
-                  ? TripWorkspacePage(
-                      tripId: _selectedTripId!,
-                      tripRepository: _trips,
-                      supplierSourceRepository: _supplierSources,
-                      supplierRepository: _suppliers,
-                      uploadDependencies: _sourceUploadDependencies,
-                      extractionDependencies: _extractionDependencies,
-                      currentUserUid: user.uid,
-                      onBack: _showMyTrips,
-                    )
+                  ? _selectedExtractionId != null
+                        ? SupplierImportReviewPage(
+                            key: ValueKey((
+                              _selectedTripId,
+                              _selectedExtractionId,
+                            )),
+                            tripId: _selectedTripId!,
+                            extractionId: _selectedExtractionId!,
+                            dependencies: _reviewDependencies,
+                            onBack: () =>
+                                setState(() => _selectedExtractionId = null),
+                          )
+                        : TripWorkspacePage(
+                            tripId: _selectedTripId!,
+                            tripRepository: _trips,
+                            supplierSourceRepository: _supplierSources,
+                            supplierRepository: _suppliers,
+                            uploadDependencies: _sourceUploadDependencies,
+                            extractionDependencies: _extractionDependencies,
+                            currentUserUid: user.uid,
+                            onBack: _showMyTrips,
+                            onReviewExtraction: (extractionId) => setState(
+                              () => _selectedExtractionId = extractionId,
+                            ),
+                          )
                   : TripsWorkspace(
                       currentUser: user,
                       tripRepository: _trips,

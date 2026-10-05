@@ -22,6 +22,7 @@ class SupplierSourcesSection extends StatefulWidget {
     required this.supplierRepository,
     required this.uploadDependencies,
     required this.extractionDependencies,
+    this.onReviewExtraction,
   });
 
   final String tripId;
@@ -30,6 +31,7 @@ class SupplierSourcesSection extends StatefulWidget {
   final SupplierRepository supplierRepository;
   final SupplierSourceUploadDependencies uploadDependencies;
   final ItineraryExtractionDependencies extractionDependencies;
+  final ValueChanged<String>? onReviewExtraction;
 
   @override
   State<SupplierSourcesSection> createState() => _SupplierSourcesSectionState();
@@ -198,6 +200,7 @@ class _SupplierSourcesSectionState extends State<SupplierSourcesSection> {
             packages: _packages!,
             extractionState: _extractions.stateFor,
             onRequestExtraction: (package) => _extractions.request(package.id),
+            onReviewExtraction: widget.onReviewExtraction,
           ),
       ],
     );
@@ -209,12 +212,14 @@ class _PackageList extends StatelessWidget {
     required this.packages,
     required this.extractionState,
     required this.onRequestExtraction,
+    this.onReviewExtraction,
   });
 
   final List<SupplierSourcePackage> packages;
   final ItineraryExtractionPackageState Function(SupplierSourcePackage)
   extractionState;
   final ValueChanged<SupplierSourcePackage> onRequestExtraction;
+  final ValueChanged<String>? onReviewExtraction;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -263,6 +268,7 @@ class _PackageList extends StatelessWidget {
                         packageId: package.id,
                         state: extractionState(package),
                         onRequest: () => onRequestExtraction(package),
+                        onReviewExtraction: onReviewExtraction,
                       ),
                     ),
                   ],
@@ -310,6 +316,7 @@ class _PackageList extends StatelessWidget {
                           packageId: packages[index].id,
                           state: extractionState(packages[index]),
                           onRequest: () => onRequestExtraction(packages[index]),
+                          onReviewExtraction: onReviewExtraction,
                         ),
                       ),
                     ],
