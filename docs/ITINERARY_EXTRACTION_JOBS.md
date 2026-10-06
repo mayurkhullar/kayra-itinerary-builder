@@ -303,8 +303,36 @@ reviewed, resolved or converted to canonical itinerary content.
 Consultant workflow belongs to the separate resolution aggregate described in
 the staging model. That aggregate owns states such as unresolved, in review,
 ready to finalize, finalized or superseded when those states are implemented.
-Finalization creates or updates canonical itinerary content and seals the
-resolution. It does not reopen or advance the terminal extraction job.
+Future finalization creates a new canonical `itinerary_draft_v2` result and
+seals the Resolution; it does not overwrite an earlier draft or quotation.
+It does not reopen or advance the terminal extraction job.
+
+### Future canonical finalization policy
+
+The chosen canonical destination is one versioned draft root with embedded
+package accommodation, inclusions, exclusions and conditions. The exact schema
+is defined in [`ITINERARY_DRAFT_MODEL.md`](ITINERARY_DRAFT_MODEL.md#canonical-v2-architecture).
+The future `supplier_import_exception_review_v1` policy in
+[`SUPPLIER_EXTRACTION_STAGING_MODEL.md`, section 25](SUPPLIER_EXTRACTION_STAGING_MODEL.md#25-canonical-package-content-and-exception-driven-finalization)
+includes safe untouched facts by default, with no per-fact acceptance writes.
+Only real exceptions need consultant action. `retain_package_level` becomes a
+valid optional explicit disposition once that destination is implemented; it
+does not bypass issues or lossless-field validation.
+
+This policy does not change the meaning of job `completed`. The machine result
+remains its immutable Snapshot, `resultingExtractionId` remains authoritative,
+and its `resultingDraftId` remains null. The later draft link belongs to the
+sealed Resolution and its private `supplier_import_finalization_v1` receipt.
+Canonical root, embedded package result, receipt, Resolution seal and audit
+event are established in the four-write transaction specified in section 25.7.
+No second model request, extraction-job mutation or Snapshot rewrite occurs.
+
+These are future architecture requirements. The current assessment still gates
+package retention until v2 is implemented, and unsupported timeline fields and
+ancillary destinations remain separate readiness constraints. Production V2.4
+request routing, provider settings, writer and legacy job/draft schemas are
+unchanged. A policy-labelled preview and compatible v1/v2 readers must precede
+v2 writes; documentation alone does not authorize a production cutover.
 
 ### Server-owned extraction contract
 
@@ -519,8 +547,11 @@ processing job or making another model call.
    results and V3 review results are distinguished truthfully. The full review
    workspace remains a later feature.
 7. Implement consultant resolution, deterministic finalization and its review
-   entry point under the staging model. Verify every staged fact receives a
-   valid disposition before canonical output can be created.
+   entry point under the staging model. Verify every staged fact has a lossless
+   default or explicit disposition and every real blocker is resolved; do not
+   require an acceptance decision for every correct fact. Include canonical v2
+   compatibility, bounded atomic persistence, private lineage and client/reuse
+   sanitization before enabling finalization.
 8. Change the callable's single server-owned current contract to V3 and make
    active deduplication contract-aware. Do not add a client version selector.
 9. Add stale active-job recovery as its own audited backend task.

@@ -1,5 +1,12 @@
 # Supplier extraction staging model
 
+**Architecture decision, 2026-10-06:** section 25 resolves the canonical package
+destination and future exception-driven finalization policy. It supersedes the
+earlier destination-neutral discussion, not the running implementation. The
+current validators/assessment still use the old package-destination gate;
+canonical v2, its finalizer and its review-policy changes are not implemented.
+Ordinary production extraction remains on V2.4.
+
 ## 1. Problem statement
 
 Supplier evidence arrives as chronological PDFs, narrative documents, tables,
@@ -73,8 +80,9 @@ The architecture has these firm decisions:
 5. Consultant decisions live in a separate mutable resolution workspace with
    an audit trail.
 6. Finalization is deterministic application logic. It makes no model call.
-7. No staging fact disappears during finalization without a recorded
-   disposition.
+7. No staging fact disappears during finalization without a recorded effective
+   outcome. A safe default outcome is recorded by the backend at finalization;
+   it does not require a consultant acceptance document for each fact.
 8. Existing canonical drafts remain the reviewed itinerary representation; the
    staging model does not replace them.
 
@@ -91,7 +99,7 @@ The architecture has these firm decisions:
 | Ancillary fact | A flight or visa fact retained for a separate current/future domain rather than normal itinerary-day persistence. |
 | Review issue | Structured uncertainty that requires or recommends consultant attention. |
 | Resolution | Consultant-authored mapping, correction, routing or exclusion decisions against one immutable extraction snapshot. |
-| Disposition | The recorded outcome for a staged fact: mapped, routed, intentionally excluded or unresolved. |
+| Disposition | Effective outcome for a staged fact: default-included, explicitly retained/corrected/mapped, routed, intentionally excluded or unresolved. Backend-derived defaults are distinct from consultant decisions. |
 | Canonical draft | The reviewed `KayraItineraryDraft` used by the itinerary product. It contains no unresolved staging-only structures. |
 
 ## 5. Proposed staging entity structure
@@ -314,10 +322,10 @@ Accommodation uses these rules:
 | Source case | Staging representation | Resolution/finalization |
 |---|---|---|
 | Hotel explicitly assigned to a day | Day-scoped hotel service. | Map to a canonical hotel service on that day. |
-| Explicit check-in/check-out span | Hotel service or package accommodation carrying the explicit span; day scope only if the source supplies it. | Consultant confirms the canonical anchor day; preserve the span without creating nightly duplicates. |
+| Explicit check-in/check-out span | Hotel service or package accommodation carrying the explicit span; day scope only if the source supplies it. | Keep the existing scope and explicit span by default. Package accommodation needs no anchor day; mapping to a day is exceptional. |
 | Hotel explicitly stated for the whole package | Package accommodation with package scope. | Map once to reviewed package content or to one canonical hotel service with a supported/consultant-confirmed span. |
-| Global hotel with unclear nights | Package accommodation plus a hotel-span review issue. | Must be resolved before it can become a dated hotel service. |
-| Multiple hotels without day mapping | Separate package accommodations in source order. | Consultant maps each hotel independently; the system does not infer sequence or nights. |
+| Global hotel with absent nights | Package accommodation with missing fields left null. A genuine ambiguous/conflicting span also has a review issue. | Preserve undated package accommodation without inventing nights. A flagged ambiguity remains an exception; absence alone does not require a dated service. |
+| Multiple hotels without day mapping | Separate package accommodations in source order. | Keep distinct package entries when that meaning is unambiguous. Unknown alternatives-versus-multiple-stays relationships require action, not inferred sequence or nights. |
 | “Hotel X or similar” | Preserve the hotel name and explicit `orSimilar` qualifier. | The qualifier survives in the reviewed destination without being duplicated. |
 
 Dates must originate from an explicit hotel date/span or a consultant decision.
@@ -349,11 +357,11 @@ can populate vehicle type. Otherwise it remains one condition at its stated
 scope. The same qualifier must not be repeated in title, description, condition
 and notes.
 
-The current canonical draft has no root package-content collection. Until a
-reviewed package-content destination exists, an important package inclusion,
-exclusion or condition cannot be silently dropped during finalization. It must
-be mapped to a supported service, routed to a supported downstream package
-content domain, or remain a finalization blocker.
+The implemented canonical v1 draft has no root package-content collection, so
+its assessment still blocks unsupported package content. The chosen future
+destination is `itinerary_draft_v2.packageContent`, defined in section 25 and
+[`ITINERARY_DRAFT_MODEL.md`](ITINERARY_DRAFT_MODEL.md). Safe package facts will
+stay there by default; mapping is not required merely to preserve them.
 
 ## 11. Flight and visa boundary
 
@@ -503,10 +511,11 @@ status labels, without turning every fact into a heavy nested card.
 
 Consultant actions are deliberately small:
 
-- accept a proposed mapping;
+- inspect the automatically assembled proposal without writing acceptance;
 - assign an unassigned service to an existing or consultant-created day;
 - resolve a service type or relationship;
-- map a package accommodation or condition;
+- deliberately narrow a package accommodation or condition to a supported
+  day/service destination when needed;
 - edit a value, recording it as consultant-authored;
 - route a flight/visa fact to its separate workflow;
 - merge proven duplicates while retaining both source references; or
@@ -627,11 +636,12 @@ visibility is never the authorization boundary.
 The strong invariant is:
 
 > A Supplier Extraction Snapshot cannot be finalized while an
-> itinerary-relevant fact lacks a recorded, valid disposition that would cause
-> it to be silently discarded.
+> itinerary-relevant fact lacks a valid, recorded effective outcome. Safe
+> default inclusion counts as an outcome; unexplained omission does not.
 
 Every fact must end in exactly one state:
 
+- included at its supported source scope by the versioned default policy;
 - mapped to one or more supported canonical fields;
 - routed to a named supported domain/workflow;
 - intentionally excluded with an auditable reason; or
@@ -642,7 +652,8 @@ Every fact must end in exactly one state:
 Block when any of the following remains:
 
 - an unassigned itinerary service has no disposition;
-- a global hotel/accommodation fact has not been safely mapped or routed;
+- a global hotel/accommodation fact has neither a safe canonical package
+  representation nor a valid explicit mapping/exclusion;
 - an important package inclusion, exclusion or condition has no supported
   destination;
 - a blocker review issue is unresolved;
@@ -679,8 +690,9 @@ available.
 
 Before writing, the finalizer deterministically walks every staged fact and
 review issue, verifies dispositions, builds the canonical payload, validates it
-with the existing domain validator and records fact-to-field lineage. No AI call
-occurs during finalization.
+with the validator for the selected canonical version and records fact-to-field
+lineage. No AI call occurs during finalization. Section 25 defines the future
+v2 default policy; this does not loosen the deployed v1 validator.
 
 ## 20. Migration from current V2.4
 
@@ -732,8 +744,9 @@ call. Comparisons use stored/synthetic fixtures or separate deliberate test
 runs, not two provider calls inside one job.
 
 For detailed day-by-day sources, all services can arrive day-assigned and the
-resolution can be pre-populated as a one-to-one proposal. The consultant sees
-the same useful structured result with staging provenance and no regression in
+preview uses deterministic one-to-one defaults without pre-writing acceptance
+decisions. The consultant sees the same useful structured result with staging
+provenance and no regression in
 day semantics.
 
 ## 21. Supplier-format validation examples
@@ -778,26 +791,13 @@ This architecture does not:
 - define visual mockups; or
 - deploy or migrate existing data.
 
-## 23. Genuine open questions
+## 23. Boundaries outside this decision
 
-Two decisions remain outside the current product contracts and must be resolved
-before full sparse-source finalization is implemented:
-
-1. **Reviewed package-content destination:** package-wide accommodations,
-   inclusions, exclusions and conditions need a supported final home. The
-   recommended shape mirrors the staging package-fact groups and should become
-   reviewed canonical package content associated with the itinerary. Whether it
-   is added to a future version of `KayraItineraryDraft` or stored as an adjacent
-   canonical itinerary-content entity requires a persistence/versioning decision.
-   Until then, important unmapped package facts block finalization.
-2. **Trusted pasted-text source item:** current Supplier Source persistence is
-   file-backed. A future ingestion design must decide whether pasted text is
-   stored as a private text object plus file-style metadata or as another
-   immutable package-item type. Either choice must preserve ordered trusted
-   provenance and feed the same extraction snapshot model.
-
-These questions do not change the staging entity, one-call provider boundary,
-immutable snapshot lifecycle or consultant resolution design.
+The canonical package destination, lineage layout, size limits and finalization
+atomicity are decided in section 25. They are no longer open alternatives.
+Trusted pasted-text ingestion and concrete flight/visa workflow identities
+remain separate architecture tasks. Neither is needed to retain safe file-backed
+package accommodation, inclusions, exclusions or operating conditions.
 
 ## 24. Supplier Import Resolution contract
 
@@ -805,8 +805,9 @@ This section fixes the durable contract between one complete immutable Supplier
 Extraction Snapshot and later canonical finalization. Where earlier sections
 describe optional approaches, this section is authoritative for resolution
 identity, lifecycle, concurrency, writes and rerun isolation. It defines an
-architecture only; no collection, Rule, callable or application model exists
-because of this document.
+architecture; documentation alone does not implement it. Resolution domain,
+trusted mutations and selected Flutter review slices now exist. Section 25 is
+authoritative for the future canonical-v2 destination and assessment policy.
 
 ### 24.1 Aggregate identity and Firestore hierarchy
 
@@ -1064,6 +1065,10 @@ content. It can permit finalization only when a deployed canonical destination
 supports every retained field. With today's `KayraItineraryDraft`, fields such
 as package scope, `orSimilar` and an undated `nightCount` have no lossless root
 home, so the assessment remains blocked. `exclude` requires an auditable reason.
+Under the future v2 policy, `retain_package_level` is a valid explicit,
+non-blocking package disposition subject to the same safety and issue gates as
+default inclusion. It remains useful for corrections and explicit scope review;
+ordinary safe package facts do not require it.
 
 ### 24.8 Package statement and condition decisions
 
@@ -1093,6 +1098,8 @@ condition kind or condition value. They do not copy unchanged Snapshot values.
 supported canonical package-content destination exists. Important package
 facts therefore remain blockers against today's draft schema unless safely
 mapped or deliberately excluded. They are never forced into an arbitrary day.
+Section 25 removes this destination-only blocker for future canonical v2 and
+defines safe untouched package retention. It does not alter today's code.
 
 ### 24.9 Ancillary flight and visa decisions
 
@@ -1353,14 +1360,15 @@ prevents an ordinary item mutation from smuggling canonical writes.
 
 ### 24.16 Finalization transaction and locked boundary
 
-The finalizer first reads the immutable Snapshot plus all current resolution
-children at revision `R`, computes `canFinalize`, builds the canonical payload
-and passes it through the existing strict canonical validator. If the result is
-ready, one transaction rechecks authorization, complete Snapshot identity,
+The future finalizer first reads the immutable Snapshot plus all current
+resolution children at revision `R`, computes `canFinalize`, builds the canonical
+payload and passes it through the version-specific strict canonical validator.
+If the result is ready, one transaction rechecks authorization, complete Snapshot identity,
 `active` status and root revision `R`. It then:
 
-- creates or updates the intended canonical draft using backend-owned IDs and
-  timestamps;
+- creates a new canonical v2 draft with embedded package content, plus the
+  immutable finalization receipt described in section 25; it never overwrites
+  an existing draft or quotation;
 - sets resolution status to `finalized`;
 - increments revision to `R + 1`;
 - records `resultingDraftId`, `finalizedByUid` and `finalizedAt`; and
@@ -1371,37 +1379,436 @@ every normal mutation command returns `resolution_finalized`. Later itinerary
 editing belongs to canonical draft/version history. It never reopens the
 resolution, rewrites the Snapshot or edits prior events.
 
-### 24.17 Reruns and canonical package-content neutrality
+### 24.17 Reruns and the selected canonical destination
 
 A rerun creates a new extraction job, new Snapshot and new deterministic
 resolution identity. Earlier decisions are neither copied nor applied. A future
 comparison or assisted-migration feature must be explicit, revalidate every
 target against the new Snapshot and write new audit events; it is out of scope.
 
-There is not enough evidence to choose whether reviewed package-wide content
-belongs in a future expanded `KayraItineraryDraft` schema or an adjacent
-canonical itinerary-content entity. The current draft is day-centric and has no
-lossless root accommodation, inclusion, exclusion or condition fields. Forcing
-those facts into it would destroy the scope this staging architecture exists to
-preserve.
+Choose the expanded canonical root, `itinerary_draft_v2`. Section 25 and the
+draft-model document define package content and its private lineage. No adjacent
+canonical package entity is introduced. `retain_package_level` continues to name
+semantic intent, not a client-selected collection. Until v2 readers, validation,
+persistence and finalization are implemented together, the current assessment
+must keep its existing destination gate. Neither this decision nor a rerun
+changes resolution identity, callable-only writes, revision checks, append-only
+audit history or Snapshot immutability.
 
-The resolution therefore records the semantic destination
-`retain_package_level` without naming a collection or copying the fact. The
-finalization assessment treats that decision as blocked until a deployed,
-versioned canonical destination supports the fact. This keeps the contract
-compatible with either future choice and prevents documentation from implying
-that package content can already be finalized into today's draft.
+## 25. Canonical package content and exception-driven finalization
 
-The remaining decisions before implementation are limited to:
+This is the selected **future architecture**, not a description of newly
+implemented behavior. The inspected pure assessment still blocks untouched
+package facts and `retain_package_level`. Current tests deliberately assert
+those gates. This documentation does not remove them in code. The existing
+production V2.4 writer and extraction path remain unchanged.
 
-1. the versioned canonical home for package-wide reviewed content;
-2. the concrete canonical flight and visa workflow identities used by routed
-   decisions;
-3. the final storage shape for fact-to-canonical-field lineage when one output
-   field has multiple Snapshot sources; and
-4. explicit operational size limits for one resolution and one finalization
-   transaction, aligned with provider and Firestore bounds.
+### 25.1 One canonical destination and explicit versions
 
-None of these questions changes resolution identity, callable-only mutations,
-revision conflict handling, append-only auditing, rerun isolation or Snapshot
-immutability.
+Choose **A: a versioned canonical draft root with embedded package content**.
+The exact new contract is `itinerary_draft_v2`, stored at the existing
+`trips/{tripId}/itinerary_drafts/{draftId}` path. Its `packageContent` contains
+four required arrays: `accommodations`, `inclusions`, `exclusions`, `conditions`.
+Its timeline retains the existing day/service contract. The full field,
+correction, ordering and lineage definitions are in
+[`ITINERARY_DRAFT_MODEL.md`](ITINERARY_DRAFT_MODEL.md#canonical-v2-architecture).
+
+Package accommodation remains first-class package content after finalization.
+It preserves explicit hotel/location, stay span, nights, room, meal and
+or-similar facts without inventing dates or a day placement. Statements preserve
+category, text, quantity, frequency and applicability. Conditions preserve kind,
+value and applicability. Inclusions and exclusions stay separate from each
+other and from all service/day notes. No arbitrary commercial-text field exists.
+
+Reject an adjacent canonical entity for this bounded rollout: every private
+read, client projection, PDF and reusable copy would acquire a join, a second
+version/authorization surface and a possible stale or missing half. A single
+root gives one rendered identity and atomic timeline/package content. Its size
+is bounded explicitly in section 25.7; oversize data never silently spills into
+a different storage model. The separate receipt is private audit evidence only.
+
+Use these distinct version names:
+
+| Contract | Meaning |
+|---|---|
+| Effective `itinerary_draft_v1` | Exact existing persisted draft shape, currently without a `schemaVersion` field. Infer only that complete legacy shape; do not rewrite old documents. |
+| `itinerary_draft_v2` | Explicit root `schemaVersion`, embedded package content and immutable `importResult` lineage. |
+| `supplier_extraction_snapshot_v1` | Existing immutable machine evidence; unchanged. |
+| `supplier_import_resolution_v1` | Existing sparse decisions/revision contract; unchanged by this documentation task. |
+| `supplier_import_exception_review_v1` | Future server-owned assessment/default-carry policy, recorded in preview and finalization. |
+| `supplier_import_finalization_v1` | Future immutable receipt schema defined below. |
+
+New policy is not inferred from a missing package decision in a historical
+finalized result. An active compatible Resolution can be assessed under the new
+policy only through its explicit policy-labelled preview and finalization
+request. The server chooses the enabled policy; the client echoes the preview's
+policy/revision as a precondition, not as permission to select an older policy.
+Old v1 drafts/quotations and V2.4 jobs remain readable with no migration. Enable
+v2 writes only after readers, validators, finalizer and access/projection support
+are compatible. Unknown/mixed versions fail closed.
+
+### 25.2 Exception-driven consultant review
+
+The consultant opens a nearly finished, deterministic preview, with a single
+summary of remaining blockers and links to the affected facts. Ordinary correct
+facts show their extracted values without an Accept button requirement. Every
+fact remains inspectable/correctable; explicit exclusion and deliberate mapping
+remain available. Source inspection is available on demand, not a mandatory
+step for each value. Safe optional warnings do not demand acknowledgements.
+
+If there are no exceptions, one explicit finalization action after preview is
+enough. It creates no per-fact acceptance writes. The backend records its
+versioned default decisions in the finalization receipt; it must not label them
+as individual consultant confirmations. No preview or ordinary autosave
+automatically finalizes the import.
+
+One correction/assignment/exclusion may also resolve the directly covered issue
+in the same audited command, once a future typed command supports that
+composition and the server proves the issue's resolution predicate. Do not add
+a second ceremonial confirmation for the same correction. This is not blanket
+issue dismissal and is not currently implemented command behavior.
+
+No empty acceptance documents, synthetic dates, inferred day assignments or
+hidden reclassification are used to make the preview look complete. Capacity,
+unsupported-field and integrity failures remain visible exceptions. Quote
+Prepared and publication/pricing checks still apply after import finalization.
+
+### 25.3 Exact default, precedence and safe inclusion gate
+
+**Rule:** an untouched Supplier fact flows to its source-scoped canonical
+destination by default if and only if every gate below succeeds. No explicit
+`retain` is required for that fact. Failure of any gate is a typed blocker or a
+specific supported exclusion/routing decision, never silent omission.
+
+1. The authoritative Snapshot is complete, schema-valid and linked to this
+   Trip, trusted source package and Resolution. Fact IDs and source references
+   are valid members. Package-only provenance for a valid multi-file source is
+   permitted; optional missing labels/file locators do not create fake IDs.
+2. The effective fact, after validated sparse corrections, satisfies its exact
+   canonical destination, including every retained field and source qualifier.
+   No loss through string flattening, field dropping or arbitrary notes occurs.
+3. Scope/classification and relationships are unambiguous. A package fact stays
+   package-wide; an assigned service retains its valid explicit day. No new
+   chronology, span, counts, hotel relationship or multi-target map is inferred.
+4. No unresolved blocking/structural issue applies to the fact, its containing
+   day/relationship, or the whole Snapshot. Exclusion does not erase an issue
+   affecting other retained facts. Issue predicates are evaluated separately.
+5. The fact passes non-commercial content validation; no known pricing,
+   supplier/client private content, ancillary misclassification or contradictory
+   source claims are admitted. A valid schema or high AI confidence alone is
+   not proof that prose is correct. Known violations surface as exceptions;
+   consultants can inspect/correct unflagged extraction mistakes as well.
+6. There is no incompatible or conflicting Resolution decision. All references,
+   effective ordering and provenance are valid, and the full output passes the
+   version-specific canonical validator and capacity limits.
+
+Absence of an optional value is not itself ambiguity. An undated global hotel
+with an explicit room type can be safe package content; contradictory hotel
+spans or unclear alternative-versus-multiple-stay relationships are not. The
+backend may detect contradictions, but cannot repair them by inference.
+
+Apply decisions in this order:
+
+- Validate aggregate integrity and all current decision references first. Even
+  a decision attached to an excluded entity may not contain foreign references.
+- Explicit `exclude` wins over default inclusion and produces no canonical
+  content for that fact. Keep its evidence/decision/receipt outcome privately.
+- A valid explicit mapping selects its supported destination and consumes the
+  fact once; it does not also retain a package copy.
+- Otherwise a package fact uses the package destination, whether untouched or
+  explicitly `retain_package_level`. Ordinary assigned days/services use their
+  existing timeline destination.
+- Apply sparse fields: **untouched** uses the canonicalized Snapshot value;
+  **set** uses the validated consultant override; **clear** deliberately removes
+  an optional value (`null` or `[]` in the required canonical shape). Required
+  fields cannot be cleared; use supported correction or exclusion instead.
+- Validate effective content and review-issue resolution, then create one
+  deterministic output and complete fact-outcome ledger. No exact-text deduping
+  silently collapses independent source facts.
+
+Canonicalization is structural (validated types, existing normalization and
+stable order), not AI rewriting, paraphrasing or content repair. Overrides do
+not mutate the Snapshot. A fully cleared accommodation option is not a valid
+retained fact. Preserve actor/time and set/clear operations in the decision
+history and lineage.
+
+| Fact / state | Future default or required action |
+|---|---|
+| Valid title, assigned day and assigned service, fully representable | Use extracted values. No mandatory explicit retain. This principle already exists for ordinary days/services in the assessment. |
+| Safe global/undated package accommodation | Include as package accommodation, without a fake day, date or booking guarantee. |
+| Safe package inclusion, exclusion or condition | Include in the matching package array, with all structured fields/provenance. |
+| Unassigned service | Explicit consultant assignment to a valid retained day, or explicit exclusion. Never assign automatically. |
+| Ambiguous hotel relationship/span, incompatible mapping, unsupported retained field | Concrete supported correction/disposition, or exclusion; otherwise block. |
+| Explicit exclusion | Omit content; audit the exclusion. Reassess dependent services/issues rather than automatically excluding them. |
+| Optional non-structural warning | May remain open, or be acknowledged voluntarily. No per-fact confirmation. |
+| Flight/visa fact | Explicit supported ancillary handling or exclusion; no default land-content destination. |
+| Commercial-presence marker | Informational ledger entry only, never rendered content or a required acknowledgement. |
+
+### 25.4 Issues, mapping and `retain_package_level`
+
+The exact future meaning of **`retain_package_level` is a valid non-blocking
+explicit disposition**, provided the same safe-inclusion gate succeeds. It
+remains useful with corrections or exceptional scope confirmation. It is
+optional for a safe untouched package fact, whose default output is identical.
+It does not waive validation, erase issues or imply that every source field has
+been personally confirmed.
+
+Mapping into a day/service is exceptional and deliberate. It is never required
+merely to preserve a package fact. Keep existing destination/type compatibility
+checks, require an actual retained target, and reject collisions or competing
+values rather than overwrite an existing field. The destination must preserve
+all effective fields, qualifiers and provenance. A plain string service
+inclusion/notes destination cannot silently absorb structured quantity,
+frequency or applicability. A legacy hotel service cannot silently lose package
+city/or-similar/night-count fields. If the supported mapping cannot preserve the
+fact, keep it package-wide or require explicit valid corrections; block the map.
+Do not flatten structure to prose or replicate a fact across several services.
+
+Future review policy distinguishes:
+
+| Issue class | Finalization behavior |
+|---|---|
+| `severity: blocker` | Blocks until concretely resolved, or validly overridden only under the existing narrow `other` policy with no invalid/lost content. |
+| Structural code | Blocks while unresolved, regardless of a permissive AI severity/flag. Codes: `chronology_unknown`, `accommodation_span_unknown`, `classification_ambiguous`, `conflicting_dates`, `global_mapping_required`, `source_conflict`. Acknowledge/override cannot substitute for structural resolution. |
+| Non-structural warning with `resolutionRequired: true` | Requires supported resolution or narrow valid `other` override. Acknowledgement is insufficient. |
+| Non-structural warning with `resolutionRequired: false` | Open is non-blocking; acknowledgement is optional and audited. It does not change source truth. |
+| Informational | Snapshot issues currently have only warning/blocker severities. Do not invent an `info` issue variant. Commercial presence is a separate assessment informational result. |
+
+The current assessment gates on severity/`resolutionRequired`; the future
+structural-code rule above is a deliberate strengthening, not a claim about
+today's code. Future validator and assessment must agree: even a historical
+acknowledgement of a structural warning cannot satisfy the new policy.
+
+Adding a package destination does not silently resolve historical
+`global_mapping_required` issues. An explicit “keep package-wide” action can
+record a retain decision and a validated resolved-issue reference together when
+the sole issue was lack of a package destination. Similarly, confirming an
+undated package scope may resolve `accommodation_span_unknown` **only** where
+the issue was inability to place it on a day, not conflicting/ambiguous supplied
+dates. Future typed issue-resolution predicates must make that distinction
+explicit; do not infer it from free-text issue messages. If the existing issue
+cannot express/prove the narrower reason, keep it blocked until the consultant
+supplies a supported concrete correction or exclusion. Never invent dates to
+satisfy it. Actual date/source conflicts still require concrete resolution.
+
+Targeted issue decisions must reference the actual correction, assignment,
+mapping, scope confirmation or exclusion covering the issue. Excluding one
+target resolves only issues whose affected content has genuinely been removed.
+Snapshot-wide issues require coverage of all affected retained content. Default
+inclusion, a bare acknowledgement, or an unrelated decision ID is not evidence.
+
+Only applicable open non-blocking warnings enter the canonical `reviewIssues`
+array, using deterministic IDs and valid canonical field targets. Resolved or
+excluded-content issues remain in Snapshot/Resolution/receipt history, not as
+false blockers on the resulting draft. If a warning cannot be projected without
+losing its target meaning, preserve it in private review history and the visible
+finalization summary; do not invent a canonical field reference.
+
+### 25.5 Future pure finalization assessment
+
+Keep assessment deterministic and separate from persistence/AI. It should
+evaluate the same versioned assembly plan that preview and finalizer use,
+return policy version/revision plus blockers/warnings/information, and account
+for every input fact. Do not let the UI maintain a second acceptance checklist.
+
+| Existing finding / situation | Future v2 policy |
+|---|---|
+| `unresolved_package_fact` solely because no explicit decision exists | Removed for safe untouched inclusions/exclusions/conditions; they have a real default destination. |
+| `unresolved_package_accommodation` solely because no explicit decision exists | Removed for safe package accommodation. |
+| `package_level_destination_unavailable` for `retain_package_level` | Removed after the entire v2 destination is implemented/enabled. Explicit retain is assessed like default package inclusion. |
+| `incomplete_package_accommodation` solely because a day hotel needs a name | Not applicable to a valid package option with other meaningful fields. Still applies to a day mapping requiring that name. |
+| `unsupported_package_accommodation_content` for city/or-similar/night count | Removed for the first-class package destination, which preserves them; remains for a lossy day mapping. |
+| `unresolved_unassigned_service`, missing day/order/type/title/required details, duplicate ordering | Remain. No invented assignment or implicit descendant exclusion. |
+| `unsupported_service_content` | Remains wherever the timeline cannot preserve retained fields. Root package support does not automatically move service-scoped facts into package content. |
+| `unresolved_review_issue`, `structural_review_issue_unresolved` | Remain with section 25.4's exact predicates; default retention never resolves them. |
+| `unresolved_ancillary_fact` | Remains without an actual supported disposition. A descriptive route name alone is not proof of a persisted ancillary result. |
+| Malformed/foreign references, conflicting decisions, invalid provenance | Remain integrity failures before assessment/assembly; cannot be overridden. |
+| Oversize, unsupported relationship, commercial/ancillary contamination, destination conflict | Typed blocking findings in the future policy. No truncation, arbitrary notes or guessed destination. |
+| Explicit valid exclusion | No retained-content blocker for that fact; preserve exclusion outcome and check dependent issues/references. |
+
+The existing timeline still lacks service-level structured conditions and some
+accommodation detail fields. This package-only architecture does not declare
+those representable or weaken `unsupported_service_content`. They require a
+separate lossless timeline extension or an explicit valid consultant correction
+before affected imports can finalize. V3 production readiness must not be
+claimed just because package blockers have been resolved architecturally.
+
+Flights/visas remain separate ancillary facts. Do not route them into `other`,
+package notes or generic land services, including through a package statement's
+existing `visa` category. A later real ancillary route needs a verified receipt;
+a handled-separately choice must satisfy its own explicit audited policy. That
+workflow is outside this decision. Exclusion remains explicit, never default.
+
+Rates, prices, totals, currencies, supplements, markup, margins, payment amounts
+and commercial terms are prohibited in canonical content and copied audit
+payloads. Commercial-presence markers contain no values and are informational.
+An operational `payment_basis` qualifier is not permission to add amounts or
+commercial notes. Publication/reuse also apply private-content sanitization.
+
+### 25.6 Trusted lineage and immutable finalization receipt
+
+Inline package provenance preserves trusted extraction/package/fact identity,
+validated source file where applicable, source label and contributing sparse
+decisions/field operations. The backend supplies identities; provider-supplied
+trusted IDs are never used. Manual content must remain explicitly consultant
+authored, without forged Supplier references. Full field definitions and
+client/reuse projections are in the draft model.
+
+Create one private, immutable receipt at
+`trips/{tripId}/supplier_extractions/{extractionId}/resolutions/{resolutionId}/finalizations/{commandId}`.
+As in section 24.1, `resolutionId` equals `extractionId`; this adds an audit
+subcollection under the existing Resolution rather than moving that aggregate.
+Direct client writes are denied; reads require the same current owner/Admin
+authorization as the Resolution. This is proposed persistence, not a collection
+created by this documentation change. Its exact conceptual fields are:
+
+| Field | Required purpose / contents |
+|---|---|
+| `schemaVersion` | Literal `supplier_import_finalization_v1`. |
+| `tripId`, `extractionId`, `resolutionId`, `sourcePackageId` | Trusted aggregate identities; exact Snapshot/Resolution linkage. |
+| `finalizationId`, `commandId`, `actorUid`, `finalizedAt` | Idempotency/event identity (same command ID), authorized actor and server timestamp. |
+| `evaluatedRevision`, `resultingRevision` | `R` and `R + 1`, matching the seal and event. |
+| `policyVersion`, `canonicalSchemaVersion`, `resultingDraftId` | Exact policy, `itinerary_draft_v2` and committed output identity. |
+| `requestFingerprint` | Backend canonical hash of the validated finalize command, actor, expected revision and policy; no raw arbitrary request payload. |
+| `contentDigest` | Hash of the validated initial canonical payload, excluding server timestamps; deterministic serialization/version belongs to this receipt schema. Detects mismatched retries, not permission to overwrite later edits. |
+| `outcomes` | Ordered complete ledger described below; no raw source prose, commercial values or file paths. |
+
+Each outcome has required `targetKind`, `targetId`, `outcome`, `decisionIds`,
+`outputTargets` and `fieldOperations`. Root title uses a controlled root target
+with null ID; other targets identify real Snapshot/manual items. Outcomes cover
+title, days, services, package facts, ancillary facts, review issues and
+commercial-presence markers. Controlled outcomes distinguish default included,
+explicit included/corrected, mapped, excluded, consultant authored, ancillary
+handled, issue resolved/overridden/open warning/acknowledged, and informational
+not included. They must not equate automatic inclusion with consultant approval.
+
+`outputTargets` contains exact canonical entity IDs or day numbers plus closed
+typed field identifiers (never arbitrary write paths). `fieldOperations`
+contains only closed field names and set/clear operations linked to contributing
+decisions; no duplicated unchanged values. Excluded/informational outcomes have
+no output targets. Each eligible input has exactly one accounted outcome, even
+if its fields target several compatible canonical fields. Timeline mappings
+retain their complete contributor lineage here when legacy `sourceReference`
+cannot express it inline. Immutable Snapshot and sealed decisions/audit provide
+the source/actor history; the receipt references rather than duplicates it.
+
+Later canonical edits neither mutate the receipt nor masquerade as the initial
+Supplier Import result. Preserve initial reconstruction through sealed inputs,
+policy version and digest; later quotation/version history remains independent.
+Never publish receipts, source labels, internal issues or private source IDs to
+clients or copying Agents. Reusable content is a separate sanitized projection,
+not an adjacent mutable canonical package entity.
+
+### 25.7 Firestore bounds and atomic finalization
+
+Use bounded embedded package content; no subcollection/chunking fallback in
+v2. Firestore's document limit is 1 MiB, map/array nesting limit is 20, API
+request limit is 10 MiB, and transactions have a 270-second duration limit with
+60-second idle expiry. Index limits also apply. These are platform ceilings,
+not operating targets. See the official
+[Firestore quotas](https://firebase.google.com/docs/firestore/quotas) and
+[transaction documentation](https://firebase.google.com/docs/firestore/manage-data/transactions).
+
+Adopt these stricter **application limits for the first finalizer**:
+
+- Complete canonical root at most **768 KiB**, including field names, values,
+  provenance and metadata using Firestore's size rules, not string length.
+- Its embedded `packageContent` at most **256 KiB** and at most **256 total
+  records**, counting accommodation envelopes/options and every statement and
+  condition. All existing source/override field limits continue to apply.
+- Receipt at most **256 KiB**; sealed Resolution root and finalization event
+  at most **32 KiB each**. Ledger growth counts toward the receipt limit.
+- At most **2,000 Snapshot entities** and **2,000 current decisions/manual
+  items combined** for one assessment, and **16 MiB** total serialized inputs.
+  Load only referenced events needed to validate current decisions; include
+  them in this byte budget. Do not scan unbounded historical events per preview.
+- At most **2 MiB** conservatively budgeted final commit, including document
+  encoding and index effects. Future persistence tests must measure the actual
+  encoding/size accounting; JSON character counts alone are insufficient.
+
+Before enabling v2 writes, exempt the large embedded timeline/package/provenance
+and receipt-ledger fields from indexing where they are never queried, while
+preserving indexes required by real existing queries. Bound nesting below the
+platform limit. This is a future deployment prerequisite, not permission to
+edit indexes or deploy now. Reject output beyond any bound with a visible
+capacity blocker. Preserve all evidence/decisions, make no partial canonical
+write and do not truncate or tell consultants to discard correct facts to fit.
+A larger import requires a separately versioned persistence extension.
+
+Finalize with **four writes in one Firestore transaction**:
+
+1. Create the canonical `itinerary_draft_v2` root, including package content and
+   immutable `importResult` receipt/policy linkage.
+2. Create the immutable finalization receipt.
+3. Seal the Resolution as `finalized`, advance `R` to `R + 1`, and set its
+   existing result/actor/time fields.
+4. Create the append-only finalization event using the same `commandId`, revision
+   pair and actor/time. Use the existing `action: finalize`,
+   `targetKind: finalization`, `targetId: commandId`, and lifecycle metadata
+   `{kind: lifecycle, status: finalized}`. The target resolves to the receipt;
+   result identity is in the receipt and sealed root. Do not invent additional
+   fields in the existing event metadata union.
+
+No source job, Snapshot, decision or Storage object is changed by finalization.
+No new quotation replaces an existing revision. No canonical `writing` phase
+is needed because the bounded aggregate and visibility link commit together.
+
+The safe protocol is:
+
+1. Authenticate and read current Trip authorization. Read complete immutable
+   Snapshot identity and Resolution root revision `R`, load bounded current
+   children, then re-read root `R`. Reject/reload on change. All accepted child
+   mutations must already advance the root atomically, as section 24 requires.
+2. Outside the transaction, build the deterministic plan, assess issues, account
+   for all facts, strictly validate v2 and enforce size limits. No model call.
+   The finalize request includes the preview's expected revision/policy.
+3. In the transaction perform all reads first. Recheck active owner/Admin and
+   current Trip ownership, immutable complete Snapshot/linkage, enabled policy,
+   Resolution active/revision `R`, and receipt/event/draft idempotency state.
+   A stale preview or changed authorization cannot commit the prepared plan.
+4. Use a backend deterministic draft ID in a reserved Supplier Import namespace
+   derived from the Resolution identity. Create only; any unrelated existing
+   document is a conflict, never overwritten. Receipt/event IDs use command ID.
+5. Commit the four writes together with server timestamps. Conflict retries
+   recheck conditions; never merge a changed revision into the old preview.
+   Do not call AI, Storage, PDF generation or an external service in the callback.
+
+On an ambiguous response, re-read the authorized Resolution/receipt/event/draft
+identity tuple. The same command/actor/fingerprint with a consistent completed
+tuple returns the same result as already applied, without a second write or
+comparing against a subsequently edited draft's current content. A different
+command cannot reopen a finalized Resolution. Mismatched/partial state is an
+integrity failure requiring operational inspection, not cleanup or overwrite.
+On a verified uncommitted retry, rerun the preconditions. PDF/client/reuse
+projections are later derived from the committed result version only.
+
+### 25.8 Rollout boundaries and future verification
+
+No model/prompt/response schema, V2.4 processor, Firebase Rule or client changes
+are made by this decision. Before enabling future finalization, implement and
+test the v2 reader/validator/writer, versioned shared assessment/preview plan,
+bounded receipt protocol, compatible projections and required access/index
+support together. Existing tests expecting package gates stay valid until that
+deliberate implementation change. No job cutover is implied.
+
+Future acceptance tests must prove:
+
+- safe untouched package facts and assigned days/services finalize without
+  per-fact decisions, preserving every field, count, ordering and provenance;
+- absent optional dates stay absent, unassigned services still block, and
+  unsupported service fields/ambiguous relationships never disappear;
+- set/clear/exclude/map precedence, no duplicate mapped copy, real issue
+  resolution and non-blocking optional warnings follow one policy;
+- no commercial/ancillary escape hatch, no false source IDs, and reusable/client
+  projections expose neither private lineage nor embedded private text;
+- legacy drafts remain readable, old writers cannot destroy v2 data, and
+  preview/finalize policy or revision mismatch creates zero writes;
+- capacity edges, concurrent changes, permission changes, transaction failure,
+  duplicate commands and ambiguous responses produce one consistent result or
+  no commit, with a complete receipt/event and no overwritten history.
+
+The canonical destination and default-review rules are settled. Remaining
+separate work is limited to explicit flight/visa destinations, lossless timeline
+field extensions and a typed multi-hotel alternatives grouping action where
+the current Snapshot/Resolution cannot express the relationship. None may be
+silently approximated to declare the whole V3 workflow ready.

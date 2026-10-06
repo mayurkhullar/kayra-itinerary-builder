@@ -120,12 +120,44 @@ One client may have multiple active trips.
 - Agent reviews/edits the draft
 - AI uncertain fields are marked Needs Review
 - Needs Review fields block Quote Prepared until resolved
-- Agent resolves using Accept Extracted Value or Edit Value
+- Agent resolves genuine exceptions using a supported confirmation, correction,
+  assignment or exclusion; ordinary correct facts must not need repeated Accept
+  Extracted Value clicks
 - Corrections should be stored as structured extraction feedback
 - Extraction feedback may improve normalization, but must not create separate
   supplier-specific parsers or itinerary domain models
 - AI use should remain minimal and focused on document extraction/structuring/matching
 - Do not add AI rewriting/polishing features by default
+
+### Exception-driven consultant review
+
+The future Supplier Import review should show a nearly finished itinerary.
+AI/backend performs structural assembly; consultants inspect and intervene for
+exceptions, ambiguity, mistakes, deliberate exclusions or unresolved placement.
+One visible summary explains remaining blockers. Every fact remains editable,
+but correct extracted fields do not require individual acceptance writes.
+
+Under the planned `supplier_import_exception_review_v1` policy, safe untouched
+facts carry through only after trusted Snapshot/provenance validation, lossless
+canonical representation, valid scope/references and review-issue checks. An
+explicit exclusion wins; sparse set/clear corrections change only those values.
+Unassigned services still require a real assignment or exclusion. Structural
+issues and resolution-required warnings cannot be bypassed by default retention.
+Optional non-structural warnings may remain open without acknowledgement.
+
+The selected future canonical `itinerary_draft_v2` root has first-class package
+accommodation, inclusions, exclusions and conditions. Global/undated content
+stays package-wide without fabricated days or forced service mapping. This is
+non-commercial itinerary content; flights/visas retain their separate ancillary
+boundary. A safe import may need only preview and one finalization action;
+pricing, publication and Quote Prepared checks remain separate.
+
+These are architecture decisions, not a claim that finalization is implemented
+or V3 production cutover is complete. Existing V2.4 drafts and extraction remain
+unchanged. The precise safety gates, lineage, versioning, size limits and atomic
+finalization are defined in
+[`SUPPLIER_EXTRACTION_STAGING_MODEL.md`, section 25](SUPPLIER_EXTRACTION_STAGING_MODEL.md#25-canonical-package-content-and-exception-driven-finalization)
+and [`ITINERARY_DRAFT_MODEL.md`](ITINERARY_DRAFT_MODEL.md#canonical-v2-architecture).
 
 ## Supplier Source Inputs and Canonical Ingestion
 
