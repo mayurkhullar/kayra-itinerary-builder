@@ -4,9 +4,9 @@ Sections before **Canonical v2 architecture** describe the implemented legacy
 model. The v2 pure TypeScript model/validator, deterministic Supplier Import
 assembly policy, private finalization receipt domain and internal Admin atomic
 finalization writer and authenticated finalization callable are implemented.
-The callable is not deployed. The Flutter V2 model,
-migration, client access/index rollout and production extraction cutover remain
-future work.
+The callable is not deployed. Strict read-only Flutter V2 parsing and repository
+support are implemented. Finalization/navigation UI, migration, client access/index
+rollout and production extraction cutover remain future work.
 
 The pure entry point is `supplierImportV2Assembly.ts`. It consumes a trusted
 complete Snapshot, Resolution aggregate and explicit context (`draftId`, `tripId`,
@@ -82,7 +82,8 @@ and 4 KiB. This is **not exact Firestore protobuf/document/index size**. Firesto
 remains the final limit; size/resource rejections return a safe capacity outcome.
 No content is truncated. See staging-model section 25.7 for loading, capacity
 and rollout details. The callable described below is connected in source only;
-there is no Flutter V2 reader/Finalize UI or production routing change.
+the separate Flutter V2 reader is implemented, with no Finalize UI or production
+routing change.
 
 ### Authenticated finalization callable (not deployed)
 
@@ -243,7 +244,8 @@ to be reinterpreted as canonical v2. Finalization policy is separately versioned
 Existing finalized results and their historical policies never change.
 
 The backend validators, stored reader and internal writer/finalizer are now
-implemented. Deploying v2 still requires version-aware Flutter readers, a trusted
+implemented, including a separate strict read-only Flutter V2 reader. Deploying
+v2 still requires Flutter navigation/rendering integration, a trusted
 callable deployment and deliberate client access/index work before enabling writes.
 Old v1 clients cannot read/write v2 through their strict
 parser; keep the writer gated until compatible clients are available. Do not
@@ -467,3 +469,13 @@ restricted copy lineage remains in a separate server-only audit record; it is
 not delivered to the copying Agent. Hotel property names may remain useful
 travel content; supplying vendor identity may not. No later edit propagates
 back to the source itinerary.
+
+### Implemented Flutter read-only V2 boundary
+
+`ItineraryDraftV2.fromFirestore` validates the closed stored contract and returns
+immutable typed timeline, package-content, provenance and import-result values.
+Metadata/timeline dates require Firestore Timestamps; package accommodation dates
+remain canonical date strings. `FirestoreItineraryDraftV2Repository.getDraft`
+performs one server read of the canonical draft and checks its requested identity
+and Trip. Existing V1 parsing and writes remain unchanged. This boundary adds no
+V2 writes, private receipt reads, callable invocation or UI integration.

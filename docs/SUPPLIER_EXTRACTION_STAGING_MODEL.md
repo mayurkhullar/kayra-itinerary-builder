@@ -7,7 +7,8 @@ and shared deterministic assembly/assessment policy are now implemented. Safe
 untouched package facts and `retain_package_level` no longer trigger the old
 pure-assessment destination gate. Internal Admin atomic finalization persistence
 and its authenticated callable are implemented. The callable is not deployed;
-Flutter V2 reader/Finalize UI and rollout remain pending.
+strict read-only Flutter V2 parsing and repository support are implemented.
+Finalize UI and rollout remain pending.
 Ordinary production extraction remains on V2.4.
 
 ## 1. Problem statement
@@ -1393,8 +1394,9 @@ Choose the expanded canonical root, `itinerary_draft_v2`. Section 25 and the
 draft-model document define package content and its private lineage. No adjacent
 canonical package entity is introduced. `retain_package_level` continues to name
 semantic intent, not a client-selected collection. The pure V2 assembly and
-assessment and internal Admin persistence now implement that destination; Flutter
-readers and finalization callable deployment remain pending. No production V3 cutover
+assessment and internal Admin persistence now implement that destination. A
+separate strict read-only Flutter V2 reader is implemented; UI integration and
+finalization callable deployment remain pending. No production V3 cutover
 follows from internal backend readiness.
 Neither this decision nor a rerun changes resolution identity, callable-only
 writes, revision checks, append-only audit history or Snapshot immutability.
@@ -1430,7 +1432,8 @@ Internal Admin persistence now creates the V2 draft and private receipt, seals
 the Resolution and creates its finalization event in one transaction. Strict
 stored serializers/readers, replay, authorization/revision checks and capacity
 tests are implemented (section 25.7). The authenticated callable is implemented
-but not deployed; Flutter V2 support remains future work. The production V2.4 writer and extraction
+but not deployed; strict read-only Flutter V2 support is implemented, while
+finalization/navigation UI remains future work. The production V2.4 writer and extraction
 path remain unchanged.
 
 ### 25.1 One canonical destination and explicit versions
@@ -1883,8 +1886,8 @@ Deterministic tests exercise the actual Admin adapter with read-before-write,
 optimistic version retry, create/update preconditions and atomic staged commits,
 including the existing Admin child-mutation adapter. No production connection or
 emulator is required for these tests. The authenticated callable now delegates
-to this engine; no Flutter reader, Finalize UI, extraction routing change or
-deployment is included.
+to this engine. A separate strict read-only Flutter V2 reader is now implemented;
+no Finalize UI, extraction routing change or deployment is included.
 
 #### Implemented authenticated callable (not deployed)
 
@@ -1919,7 +1922,7 @@ No model/prompt/response schema, V2.4 processor, Firebase Rule or client changes
 are made by this internal persistence implementation. The backend V2 validator,
 stored reader/writer, shared assessment and bounded atomic receipt protocol now
 have focused tests. Before enabling finalization, implement and test its trusted
-callable deployment, compatible Flutter readers/UI, projections and required access/index
+callable deployment, Flutter reader/UI integration, projections and required access/index
 support together. No job cutover is implied.
 
 Backend tests now cover the assembly, persistence and replay cases below;

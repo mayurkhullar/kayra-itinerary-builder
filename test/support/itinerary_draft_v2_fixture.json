@@ -1,0 +1,318 @@
+{
+  "minimal": {
+    "tripId": "trip-1",
+    "schemaVersion": "itinerary_draft_v2",
+    "title": "Dubai visit",
+    "days": [],
+    "sourcePackageIds": [
+      "package-1"
+    ],
+    "reviewIssues": [],
+    "createdByUid": "agent-1",
+    "createdAt": {
+      "$timestamp": [
+        1791280800,
+        0
+      ]
+    },
+    "updatedAt": {
+      "$timestamp": [
+        1791280800,
+        0
+      ]
+    },
+    "packageContent": {
+      "accommodations": [],
+      "inclusions": [],
+      "exclusions": [],
+      "conditions": []
+    },
+    "importResult": {
+      "extractionId": "extraction-1",
+      "resolutionId": "extraction-1",
+      "evaluatedRevision": 3,
+      "sourcePackageId": "package-1",
+      "finalizationId": "finalize-1",
+      "policyVersion": "supplier_import_exception_review_v1"
+    }
+  },
+  "full": {
+    "tripId": "trip-1",
+    "schemaVersion": "itinerary_draft_v2",
+    "title": "Dubai visit",
+    "days": [
+      {
+        "dayNumber": 1,
+        "date": {
+          "$timestamp": [
+            1799539200,
+            0
+          ]
+        },
+        "title": "Arrival",
+        "summary": null,
+        "services": [
+          {
+            "id": "service-hotel",
+            "type": "hotel",
+            "title": "Local visit",
+            "description": null,
+            "startTime": null,
+            "endTime": null,
+            "location": null,
+            "city": null,
+            "inclusions": [],
+            "exclusions": [],
+            "notes": null,
+            "hotelDetails": {
+              "hotelName": "Timeline Hotel",
+              "checkInDate": {
+                "$timestamp": [
+                  1799539200,
+                  0
+                ]
+              },
+              "checkOutDate": {
+                "$timestamp": [
+                  1799712000,
+                  0
+                ]
+              },
+              "roomType": "Twin",
+              "mealPlan": "Breakfast",
+              "numberOfRooms": 1,
+              "supplierStarRating": null
+            },
+            "transferDetails": null,
+            "activityDetails": null,
+            "sourceReference": {
+              "supplierSourcePackageId": "package-1",
+              "supplierSourceFileId": "file-1",
+              "sourceLabel": "Page 1"
+            }
+          },
+          {
+            "id": "service-transfer",
+            "type": "transfer",
+            "title": "Local visit",
+            "description": null,
+            "startTime": null,
+            "endTime": null,
+            "location": null,
+            "city": null,
+            "inclusions": [],
+            "exclusions": [],
+            "notes": null,
+            "hotelDetails": null,
+            "transferDetails": {
+              "pickup": "Airport",
+              "dropoff": "Hotel",
+              "vehicleType": "Sedan",
+              "transferType": "private"
+            },
+            "activityDetails": null,
+            "sourceReference": null
+          },
+          {
+            "id": "service-activity",
+            "type": "activity",
+            "title": "Local visit",
+            "description": null,
+            "startTime": null,
+            "endTime": null,
+            "location": null,
+            "city": null,
+            "inclusions": [],
+            "exclusions": [],
+            "notes": null,
+            "hotelDetails": null,
+            "transferDetails": null,
+            "activityDetails": {
+              "activityName": "Museum visit",
+              "duration": "2 hours",
+              "activityType": "Guided"
+            },
+            "sourceReference": null
+          }
+        ],
+        "notes": null
+      }
+    ],
+    "sourcePackageIds": [
+      "package-1"
+    ],
+    "reviewIssues": [
+      {
+        "id": "warning-1",
+        "fieldPath": "days[0].services[2].startTime",
+        "message": "Timing not supplied.",
+        "severity": "warning"
+      }
+    ],
+    "createdByUid": "agent-1",
+    "createdAt": {
+      "$timestamp": [
+        1791280800,
+        0
+      ]
+    },
+    "updatedAt": {
+      "$timestamp": [
+        1791280800,
+        0
+      ]
+    },
+    "packageContent": {
+      "accommodations": [
+        {
+          "id": "stay-1",
+          "order": 1,
+          "selection": "single",
+          "options": [
+            {
+              "id": "stay-1-option-1",
+              "order": 1,
+              "details": {
+                "hotelName": "Example Hotel",
+                "city": "Dubai",
+                "orSimilar": true,
+                "checkInDate": null,
+                "checkOutDate": null,
+                "nightCount": 3,
+                "roomType": "Deluxe",
+                "mealPlan": "Breakfast",
+                "numberOfRooms": 2,
+                "supplierStarRating": "5 Star"
+              },
+              "provenance": {
+                "origin": "supplier",
+                "extractionId": "extraction-1",
+                "sourcePackageId": "package-1",
+                "contributors": [
+                  {
+                    "stagedFactId": "stay-1",
+                    "sources": [
+                      {
+                        "supplierSourceFileId": "file-1",
+                        "sourceLabel": "Page 2"
+                      }
+                    ]
+                  }
+                ],
+                "resolutionId": "extraction-1",
+                "evaluatedRevision": 3,
+                "decisionIds": [],
+                "fieldChanges": []
+              }
+            }
+          ]
+        }
+      ],
+      "inclusions": [
+        {
+          "id": "inclusion-1",
+          "order": 1,
+          "category": "meal",
+          "text": "Lunches",
+          "quantity": 5,
+          "frequency": "per stay",
+          "appliesTo": [
+            "meal"
+          ],
+          "provenance": {
+            "origin": "supplier",
+            "extractionId": "extraction-1",
+            "sourcePackageId": "package-1",
+            "contributors": [
+              {
+                "stagedFactId": "inclusion-1",
+                "sources": [
+                  {
+                    "supplierSourceFileId": "file-1",
+                    "sourceLabel": "Page 2"
+                  }
+                ]
+              }
+            ],
+            "resolutionId": "extraction-1",
+            "evaluatedRevision": 3,
+            "decisionIds": [],
+            "fieldChanges": []
+          }
+        }
+      ],
+      "exclusions": [
+        {
+          "id": "exclusion-1",
+          "order": 1,
+          "category": "meal",
+          "text": "Dinners",
+          "quantity": 3,
+          "frequency": "per stay",
+          "appliesTo": [
+            "meal"
+          ],
+          "provenance": {
+            "origin": "supplier",
+            "extractionId": "extraction-1",
+            "sourcePackageId": "package-1",
+            "contributors": [
+              {
+                "stagedFactId": "exclusion-1",
+                "sources": [
+                  {
+                    "supplierSourceFileId": "file-1",
+                    "sourceLabel": "Page 2"
+                  }
+                ]
+              }
+            ],
+            "resolutionId": "extraction-1",
+            "evaluatedRevision": 3,
+            "decisionIds": [],
+            "fieldChanges": []
+          }
+        }
+      ],
+      "conditions": [
+        {
+          "id": "condition-1",
+          "order": 1,
+          "kind": "operating_basis",
+          "value": "Shared basis",
+          "appliesTo": [
+            "transfer"
+          ],
+          "provenance": {
+            "origin": "supplier",
+            "extractionId": "extraction-1",
+            "sourcePackageId": "package-1",
+            "contributors": [
+              {
+                "stagedFactId": "condition-1",
+                "sources": [
+                  {
+                    "supplierSourceFileId": "file-1",
+                    "sourceLabel": "Page 2"
+                  }
+                ]
+              }
+            ],
+            "resolutionId": "extraction-1",
+            "evaluatedRevision": 3,
+            "decisionIds": [],
+            "fieldChanges": []
+          }
+        }
+      ]
+    },
+    "importResult": {
+      "extractionId": "extraction-1",
+      "resolutionId": "extraction-1",
+      "evaluatedRevision": 3,
+      "sourcePackageId": "package-1",
+      "finalizationId": "finalize-1",
+      "policyVersion": "supplier_import_exception_review_v1"
+    }
+  }
+}
