@@ -1,9 +1,10 @@
 # Structured itinerary draft model
 
 Sections before **Canonical v2 architecture** describe the implemented legacy
-model. The v2 pure TypeScript model/validator and deterministic Supplier Import
-assembly policy are implemented. Its writer, persistent finalizer, Flutter model,
-migration, Rules and production extraction cutover remain future work.
+model. The v2 pure TypeScript model/validator, deterministic Supplier Import
+assembly policy and private finalization receipt domain are implemented. Its
+writer, persistent finalizer, Flutter model, migration, Rules and production
+extraction cutover remain future work.
 
 The pure entry point is `supplierImportV2Assembly.ts`. It consumes a trusted
 complete Snapshot, Resolution aggregate and explicit context (`draftId`, `tripId`,
@@ -19,6 +20,20 @@ Package lineage and the separate accounting retain trusted sources, staged
 identities and correction links. Count capacity is enforced; exact Firestore
 byte size and rechecking authorization/revision remain future writer duties.
 Nothing in this pure policy persists a draft or seals a Resolution.
+
+`createSupplierImportFinalizationReceipt` consumes a successful assembly plus
+trusted command/actor/revision/time context. The private
+`supplier_import_finalization_v1` receipt binds the initial authoritative V2 map
+with lowercase SHA-256, excluding only root `createdAt`/`updatedAt`; a separate
+SHA-256 fingerprint binds the validated command, actor, expected revision and
+policy. Closed, ordered outcomes reuse assembly accounting, including review
+dispositions, mapping fields and correction/movement operations, without copying
+source text or canonical content. Strict map conversion uses UTC ISO timestamps
+and immutable domain Dates. Source membership remains the trusted assembly's
+responsibility; receipt creation checks linkage, canonical digest and output
+coverage. Domain entity/decision/manual count limits are enforced; exact persisted
+byte capacity remains a future writer responsibility. No receipt persistence,
+Resolution seal, finalization audit write or callable is implemented.
 
 `KayraItineraryDraft` is the editable, provider-neutral itinerary structure used
 after supplier material has been organized. It contains client-facing travel

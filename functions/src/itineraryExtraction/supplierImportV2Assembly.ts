@@ -73,7 +73,7 @@ export function assembleSupplierImportV2(
   const structure = findAssemblyStructureIssues(snapshot, resolution);
   blockers.push(...structure.blockers);
   informational.push(...structure.informational);
-  const reviewIssues = assessAssemblyReview(snapshot, resolution, blockers, warnings);
+  const reviewIssues = assessAssemblyReview(snapshot, resolution, blockers, warnings, accounting);
   const timeline = buildTimeline(snapshot, resolution, accounting);
   const packageContent = buildPackageContent(snapshot, resolution, importResult, timeline, accounting, blockers);
   const titleDecision = resolution.decisions.find((decision) => decision.decisionKind === "title");

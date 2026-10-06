@@ -1411,9 +1411,20 @@ Package and manual content, sparse corrections, import linkage and count limits
 are covered by focused tests. Pure Snapshot structural validation reuses the
 stored parser; file authority remains the trusted reader's responsibility.
 
-Finalization persistence/receipts, sealing, transactions, new callables and
-Flutter V2 support remain future work. The existing production V2.4 writer and
-extraction path remain unchanged.
+The pure private `supplier_import_finalization_v1` receipt domain is also
+implemented. Its deterministic factory accepts only a successful assembly and
+trusted finalization context, validates candidate/linkage/output coverage, and
+retains compact existing accounting with review outcomes, mapping selectors and
+field operations. SHA-256 binds the authoritative canonical map excluding root
+server timestamps; a separate fixed-shape command/actor/revision/policy
+fingerprint supports future retry comparison. Strict map conversion, defensive
+Dates, deep immutability and the 2,000-source-entity / 2,000-decisions-plus-manual
+bounds are tested. Source membership still belongs to the trusted reader and
+assembler; exact persisted-byte enforcement belongs to the future writer.
+
+Receipt persistence, Resolution sealing, finalization audit event writes,
+transactions, new callables and Flutter V2 support remain future work. The
+existing production V2.4 writer and extraction path remain unchanged.
 
 ### 25.1 One canonical destination and explicit versions
 

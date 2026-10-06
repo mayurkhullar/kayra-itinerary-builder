@@ -2,9 +2,9 @@ import type {StagedReviewIssue, SupplierExtractionSnapshot} from "./supplierExtr
 import type {SupplierImportDecision, SupplierImportResolutionAggregate} from "./supplierImportResolution";
 import {concretelyResolves} from "./supplierImportResolutionValidation";
 import type {
-  FinalizationBlockerCode, FinalizationFinding, FinalizationWarningCode,
+  FinalizationBlockerCode, FinalizationFinding, FinalizationWarningCode, SupplierImportAccounting,
 } from "./supplierImportV2AssemblyTypes";
-import {canonicalId} from "./supplierImportV2AssemblyValues";
+import {account, canonicalId} from "./supplierImportV2AssemblyValues";
 
 const structural = new Set(["chronology_unknown", "accommodation_span_unknown",
   "classification_ambiguous", "conflicting_dates", "global_mapping_required", "source_conflict"]);
@@ -12,6 +12,7 @@ const structural = new Set(["chronology_unknown", "accommodation_span_unknown",
 export function assessAssemblyReview(
   snapshot: SupplierExtractionSnapshot, resolution: SupplierImportResolutionAggregate,
   blockers: FinalizationFinding<FinalizationBlockerCode>[], warnings: FinalizationFinding<FinalizationWarningCode>[],
+  accounting: SupplierImportAccounting[],
 ): object[] {
   const decisions = new Map(resolution.decisions.map((decision) => [decision.decisionId, decision]));
   const manualIds = new Set(resolution.manualItems.map((item) => item.itemKind === "consultant_day" ? item.manualDayId : item.manualServiceId));
@@ -32,6 +33,12 @@ export function assessAssemblyReview(
     const resolved = decision?.outcome === "resolved" && requiredIds.length > 0 &&
       requiredIds.every((id) => concrete.some((item) => item.targetEntityId === id));
     const overridden = decision?.outcome === "overridden" && issue.code === "other";
+    const outcome = blocking && !resolved && !overridden ? "blocked" :
+      overridden ? "review_overridden" : resolved ? "review_resolved" :
+        decision?.outcome === "acknowledged" ? "review_acknowledged" : "review_open_warning";
+    account(accounting, issue.id, "review_issue", issue.sources, decision, outcome,
+      outcome === "review_open_warning" || outcome === "review_acknowledged" ?
+        [canonicalId(snapshot, "review", issue.id)] : []);
     if (blocking && !resolved && !overridden) {
       blockers.push({code: structural.has(issue.code) ? "structural_review_issue_unresolved" : "unresolved_review_issue",
         targetKind: "review_issue", targetId: issue.id});

@@ -53,9 +53,18 @@ export function account(
   sources: readonly TrustedSnapshotSourceReference[], decision: SupplierImportDecision | undefined,
   outcome: ImportAccountingOutcome, outputIds: readonly string[] = [], origin: "supplier" | "consultant" = "supplier", outputDayNumber: number | null = null,
 ): void {
-  ledger.push({entityId, entityKind, origin, outcome, outputIds, outputDayNumber, sources,
+  const changes = fieldChanges(decision && "overrides" in decision ? decision.overrides : undefined);
+  if (decision?.decisionKind === "day" || decision?.decisionKind === "service" ||
+      decision?.decisionKind === "package_accommodation") {
+    if (decision.canonicalOrder != null) changes.push({field: "canonicalOrder", operation: "set"});
+    if ("day" in decision && decision.day != null) changes.push({field: "day", operation: "set"});
+  }
+  changes.sort((a, b) => a.field.localeCompare(b.field));
+  const mappingDestination = (decision?.decisionKind === "package_statement" ||
+    decision?.decisionKind === "package_condition") && decision.disposition === "map_to_service" ? decision.destination : null;
+  ledger.push({entityId, entityKind, origin, outcome, outputIds, outputDayNumber, mappingDestination, sources,
     decisionIds: decision ? [decision.decisionId] : [],
-    fieldChanges: fieldChanges(decision && "overrides" in decision ? decision.overrides : undefined)});
+    fieldChanges: changes});
 }
 
 export function provenance(

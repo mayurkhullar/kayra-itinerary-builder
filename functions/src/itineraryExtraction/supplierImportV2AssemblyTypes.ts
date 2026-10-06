@@ -1,4 +1,5 @@
 import type {ItineraryDraftV2, itineraryDraftV2ImportPolicy} from "./itineraryDraftV2";
+import type {PackageServiceDestination} from "./supplierImportResolution";
 import type {SupplierExtractionFact, TrustedSnapshotSourceReference} from "./supplierExtractionSnapshot";
 
 export type FinalizationBlockerCode =
@@ -66,17 +67,19 @@ export interface SupplierImportV2AssemblyContext {
 
 export type ImportAccountingOutcome = "auto_retained" | "explicit_retained" |
   "mapped" | "excluded" | "blocked" | "manual" | "handled_separately" |
-  "routed" | "informational";
+  "routed" | "informational" | "review_resolved" | "review_overridden" |
+  "review_open_warning" | "review_acknowledged";
 
 /** Private finalizer input, separate from the canonical candidate. Never a receipt. */
 export interface SupplierImportAccounting {
   readonly entityId: string;
-  readonly entityKind: SupplierExtractionFact["factKind"] | "title" | "day" | "consultant_day" | "consultant_service";
+  readonly entityKind: SupplierExtractionFact["factKind"] | "title" | "day" | "consultant_day" | "consultant_service" | "review_issue";
   readonly origin: "supplier" | "consultant";
   readonly outcome: ImportAccountingOutcome;
   readonly outputIds: readonly string[];
   /** Timeline days have dayNumber, not an invented canonical document ID. */
   readonly outputDayNumber: number | null;
+  readonly mappingDestination: PackageServiceDestination | null;
   readonly sources: readonly TrustedSnapshotSourceReference[];
   readonly decisionIds: readonly string[];
   readonly fieldChanges: readonly {field: string; operation: "set" | "clear"}[];
