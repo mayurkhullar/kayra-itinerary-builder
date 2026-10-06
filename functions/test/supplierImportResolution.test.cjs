@@ -349,11 +349,10 @@ function accommodationDecision(overrides = {}) {
   };
 }
 
-test('U/V accommodation blocks unresolved and mapped accommodation resolves', () => {
+test('U/V safe accommodation auto-carries and explicit mapping remains ready', () => {
   const source = accommodationSource();
   const open = validate(source, aggregate(source));
-  assert(codes(assessSupplierImportFinalization(source, open))
-    .includes('unresolved_package_accommodation'));
+  assert.equal(assessSupplierImportFinalization(source, open).canFinalize, true);
   const mapped = validate(source, aggregate(source, {
     decisions: [accommodationDecision()],
   }));
@@ -373,13 +372,12 @@ test('W accommodation consultant dates remain explicit override operations', () 
   assert.equal(source.facts[0].details.checkInDate, null);
 });
 
-test('X retained package accommodation remains canonically blocked', () => {
+test('X retained package accommodation has a canonical V2 destination', () => {
   const source = accommodationSource();
   const value = validate(source, aggregate(source, {decisions: [accommodationDecision({
     disposition: 'retain_package_level', day: null, canonicalOrder: null,
   })]}));
-  assert(codes(assessSupplierImportFinalization(source, value))
-    .includes('package_level_destination_unavailable'));
+  assert.equal(assessSupplierImportFinalization(source, value).canFinalize, true);
 });
 
 function packageStatementDecision(id, overrides = {}) {
@@ -395,15 +393,14 @@ function packageStatementDecision(id, overrides = {}) {
   };
 }
 
-test('Y retained package inclusion follows canonical destination gate', () => {
+test('Y retained package inclusion has a canonical V2 destination', () => {
   const source = snapshot({packageFacts: {inclusions: [
     {category: 'meal', text: 'Breakfast included'},
   ]}});
   const value = validate(source, aggregate(source, {decisions: [
     packageStatementDecision('package-fact-1'),
   ]}));
-  assert(codes(assessSupplierImportFinalization(source, value))
-    .includes('package_level_destination_unavailable'));
+  assert.equal(assessSupplierImportFinalization(source, value).canFinalize, true);
 });
 
 test('Z/AA compatible package mapping is valid and incompatible mapping rejects', () => {

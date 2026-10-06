@@ -1,9 +1,24 @@
 # Structured itinerary draft model
 
 Sections before **Canonical v2 architecture** describe the implemented legacy
-model. The v2 pure TypeScript model/validator is implemented; its writer,
-finalizer, Flutter model, migration, Rules and production extraction cutover
-remain future work.
+model. The v2 pure TypeScript model/validator and deterministic Supplier Import
+assembly policy are implemented. Its writer, persistent finalizer, Flutter model,
+migration, Rules and production extraction cutover remain future work.
+
+The pure entry point is `supplierImportV2Assembly.ts`. It consumes a trusted
+complete Snapshot, Resolution aggregate and explicit context (`draftId`, `tripId`,
+`actorUid`, `finalizationId`, `createdAt`, `updatedAt`, `policyVersion`). It returns
+either an immutable validated V2 candidate with accounting, or deterministic
+blockers with no candidate. The compatibility assessment delegates to this same
+policy, using a discarded validation-only metadata envelope when no explicit
+context is supplied. Safe untouched days, assigned services and package facts
+carry automatically; explicit decisions and sparse set/clear overrides win.
+Package arrays compact surviving source order; day/service order collisions
+block. Manual content has consultant-origin accounting and no supplier locator.
+Package lineage and the separate accounting retain trusted sources, staged
+identities and correction links. Count capacity is enforced; exact Firestore
+byte size and rechecking authorization/revision remain future writer duties.
+Nothing in this pure policy persists a draft or seals a Resolution.
 
 `KayraItineraryDraft` is the editable, provider-neutral itinerary structure used
 after supplier material has been organized. It contains client-facing travel

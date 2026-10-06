@@ -322,6 +322,22 @@ export function assertSupplierExtractionSnapshotInvariants(
   snapshot: SupplierExtractionSnapshot,
   trustedPackage: TrustedSupplierSourcePackage,
 ): void {
+  if (!trustedPackage) invalid("Trusted source package is required.");
+  assertSnapshotInvariants(snapshot, trustedPackage);
+}
+
+/** Internal shape/linkage only. Source-file authority remains with the trusted
+ * Snapshot reader; this function does not authenticate arbitrary snapshots. */
+export function assertSupplierExtractionSnapshotStructure(
+  snapshot: SupplierExtractionSnapshot,
+): void {
+  assertSnapshotInvariants(snapshot);
+}
+
+function assertSnapshotInvariants(
+  snapshot: SupplierExtractionSnapshot,
+  trustedPackage?: TrustedSupplierSourcePackage,
+): void {
   if (snapshot.schemaVersion !== supplierExtractionSnapshotSchemaVersion) {
     invalid("Supplier extraction schema version is invalid.");
   }
@@ -334,8 +350,8 @@ export function assertSupplierExtractionSnapshotInvariants(
   ] as const) {
     if (!validSourceIdentity(value)) invalid(`${label} identity is invalid.`);
   }
-  if (trustedPackage.tripId !== snapshot.tripId ||
-      trustedPackage.packageId !== snapshot.sourcePackageId) {
+  if (trustedPackage !== undefined && (trustedPackage.tripId !== snapshot.tripId ||
+      trustedPackage.packageId !== snapshot.sourcePackageId)) {
     invalid("Snapshot metadata does not match the trusted package.");
   }
   if (!Array.isArray(snapshot.days) || !Array.isArray(snapshot.facts) ||
@@ -358,7 +374,7 @@ export function assertSupplierExtractionSnapshotInvariants(
 
   const daysById = new Map(snapshot.days.map((day) => [day.id, day]));
   const factsById = new Map(snapshot.facts.map((fact) => [fact.id, fact]));
-  const trustedFileIds = new Set(
+  const trustedFileIds = trustedPackage === undefined ? undefined : new Set(
     trustedPackage.files.map((file) => file.sourceFileId),
   );
   validateTrustedSources(snapshot.title.sources, snapshot, trustedFileIds);
@@ -450,7 +466,7 @@ export function assertSupplierExtractionSnapshotInvariants(
 function validateNestedSources(
   values: readonly {sources: readonly TrustedSnapshotSourceReference[]}[],
   snapshot: SupplierExtractionSnapshot,
-  trustedFileIds: ReadonlySet<string>,
+  trustedFileIds: ReadonlySet<string> | undefined,
 ): void {
   for (const value of values) {
     validateTrustedSources(value.sources, snapshot, trustedFileIds);
@@ -460,7 +476,7 @@ function validateNestedSources(
 function validateTrustedSources(
   sources: readonly TrustedSnapshotSourceReference[],
   snapshot: SupplierExtractionSnapshot,
-  trustedFileIds: ReadonlySet<string>,
+  trustedFileIds: ReadonlySet<string> | undefined,
 ): void {
   if (!Array.isArray(sources) || sources.length === 0) {
     invalid("Trusted source references are required.");
@@ -468,7 +484,7 @@ function validateTrustedSources(
   for (const source of sources) {
     if (source.supplierSourcePackageId !== snapshot.sourcePackageId ||
         (source.supplierSourceFileId !== null &&
-          !trustedFileIds.has(source.supplierSourceFileId))) {
+          trustedFileIds !== undefined && !trustedFileIds.has(source.supplierSourceFileId))) {
       invalid("Trusted source reference is outside the snapshot package.");
     }
   }

@@ -33,6 +33,7 @@ import {
 import {
   SupplierExtractionSnapshotError,
   assertSupplierExtractionSnapshotInvariants,
+  assertSupplierExtractionSnapshotStructure,
 } from "./supplierExtractionValidation";
 import {TrustedSupplierSourcePackage, validSourceIdentity} from
   "./sourceReaderValidation";
@@ -85,6 +86,15 @@ export function parseStoredSupplierExtractionSnapshot(
   input: unknown,
   trustedPackage: TrustedSupplierSourcePackage,
 ): SupplierExtractionSnapshot {
+  const snapshot = parseSupplierExtractionSnapshotStructure(input);
+  assertSupplierExtractionSnapshotInvariants(snapshot, trustedPackage);
+  return snapshot;
+}
+
+/** Revalidates trusted domain input without inventing source-file authority. */
+export function parseSupplierExtractionSnapshotStructure(
+  input: unknown,
+): SupplierExtractionSnapshot {
   const data = completeRecord(input, [
     "schemaVersion", "extractionId", "tripId", "sourcePackageId", "jobId",
     "requestedByUid", "createdAt", "providerVersion", "title", "days",
@@ -109,7 +119,7 @@ export function parseStoredSupplierExtractionSnapshot(
     counts: parseCounts(data.counts),
   };
   assertDeterministicIdentities(snapshot);
-  assertSupplierExtractionSnapshotInvariants(snapshot, trustedPackage);
+  assertSupplierExtractionSnapshotStructure(snapshot);
   return deepFreeze(snapshot);
 }
 

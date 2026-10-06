@@ -1022,7 +1022,7 @@ const structuralReviewCodes = new Set([
   "source_conflict",
 ]);
 
-function concretelyResolves(
+export function concretelyResolves(
   code: StagedReviewIssue["code"],
   reference: ResolutionReference,
   decisions: Map<string, SupplierImportDecision>,

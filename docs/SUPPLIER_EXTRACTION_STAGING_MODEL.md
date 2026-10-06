@@ -2,11 +2,11 @@
 
 **Architecture decision, 2026-10-06:** section 25 resolves the canonical package
 destination and future exception-driven finalization policy. It supersedes the
-earlier destination-neutral discussion, not the running implementation. The
-current assessment still uses the old package-destination gate. The canonical
-v2 pure TypeScript domain now exists; its persistence, finalizer and review-policy
-changes are not implemented.
-Ordinary production extraction remains on V2.4.
+earlier destination-neutral discussion. The canonical v2 pure TypeScript domain
+and shared deterministic assembly/assessment policy are now implemented. Safe
+untouched package facts and `retain_package_level` no longer trigger the old
+pure-assessment destination gate. Persistence and the finalization writer are
+not implemented. Ordinary production extraction remains on V2.4.
 
 ## 1. Problem statement
 
@@ -1390,19 +1390,30 @@ target against the new Snapshot and write new audit events; it is out of scope.
 Choose the expanded canonical root, `itinerary_draft_v2`. Section 25 and the
 draft-model document define package content and its private lineage. No adjacent
 canonical package entity is introduced. `retain_package_level` continues to name
-semantic intent, not a client-selected collection. Until v2 readers, validation,
-persistence and finalization are implemented together, the current assessment
-must keep its existing destination gate. Neither this decision nor a rerun
-changes resolution identity, callable-only writes, revision checks, append-only
-audit history or Snapshot immutability.
+semantic intent, not a client-selected collection. The pure V2 assembly and
+assessment now implement that destination; readers, persistence and finalization
+remain pending. No production V3 cutover follows from pure-domain readiness.
+Neither this decision nor a rerun changes resolution identity, callable-only
+writes, revision checks, append-only audit history or Snapshot immutability.
 
 ## 25. Canonical package content and exception-driven finalization
 
-This is the selected **future architecture**, not a description of newly
-implemented behavior. The inspected pure assessment still blocks untouched
-package facts and `retain_package_level`. Current tests deliberately assert
-those gates. This documentation does not remove them in code. The existing
-production V2.4 writer and extraction path remain unchanged.
+**Implementation status:** the pure canonical V2 domain and exception-driven
+assembly policy below are implemented. `assembleSupplierImportV2` and
+`assessSupplierImportFinalization` share one evaluator and the authoritative V2
+validator. Trusted output context is explicit; assessment's default envelope is
+validation-only and its candidate is discarded. Ready results include a validated
+immutable candidate and deterministic private accounting; blocked results never
+include a draft. Every package fact is automatically retained, explicitly
+retained, mapped once, excluded, or blocked. Source-relative package ordering is
+compacted after mapping/exclusion; day/service collisions are never repaired.
+Package and manual content, sparse corrections, import linkage and count limits
+are covered by focused tests. Pure Snapshot structural validation reuses the
+stored parser; file authority remains the trusted reader's responsibility.
+
+Finalization persistence/receipts, sealing, transactions, new callables and
+Flutter V2 support remain future work. The existing production V2.4 writer and
+extraction path remain unchanged.
 
 ### 25.1 One canonical destination and explicit versions
 
@@ -1575,10 +1586,13 @@ Future review policy distinguishes:
 | Non-structural warning with `resolutionRequired: false` | Open is non-blocking; acknowledgement is optional and audited. It does not change source truth. |
 | Informational | Snapshot issues currently have only warning/blocker severities. Do not invent an `info` issue variant. Commercial presence is a separate assessment informational result. |
 
-The current assessment gates on severity/`resolutionRequired`; the future
-structural-code rule above is a deliberate strengthening, not a claim about
-today's code. Future validator and assessment must agree: even a historical
-acknowledgement of a structural warning cannot satisfy the new policy.
+The shared pure assessment/assembly now enforces the structural-code rule above,
+including historical acknowledgements that remain valid intermediate decisions.
+It reuses existing concrete-resolution predicates and requires correction of the
+actual target. Snapshot-wide issues have no typed affected-entity list, so the
+policy conservatively requires concrete referenced coverage of every source day
+and non-commercial fact; an unrelated correction cannot waive the issue. The
+mutation contract remains unchanged and may store intermediate blocked states.
 
 Adding a package destination does not silently resolve historical
 `global_mapping_required` issues. An explicit “keep package-wide” action can
