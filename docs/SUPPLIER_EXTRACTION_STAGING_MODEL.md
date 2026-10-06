@@ -5,8 +5,9 @@ destination and future exception-driven finalization policy. It supersedes the
 earlier destination-neutral discussion. The canonical v2 pure TypeScript domain
 and shared deterministic assembly/assessment policy are now implemented. Safe
 untouched package facts and `retain_package_level` no longer trigger the old
-pure-assessment destination gate. Persistence and the finalization writer are
-not implemented. Ordinary production extraction remains on V2.4.
+pure-assessment destination gate. Internal Admin atomic finalization persistence
+is implemented; its callable, Flutter V2 reader/UI and deployment remain pending.
+Ordinary production extraction remains on V2.4.
 
 ## 1. Problem statement
 
@@ -1391,8 +1392,9 @@ Choose the expanded canonical root, `itinerary_draft_v2`. Section 25 and the
 draft-model document define package content and its private lineage. No adjacent
 canonical package entity is introduced. `retain_package_level` continues to name
 semantic intent, not a client-selected collection. The pure V2 assembly and
-assessment now implement that destination; readers, persistence and finalization
-remain pending. No production V3 cutover follows from pure-domain readiness.
+assessment and internal Admin persistence now implement that destination; Flutter
+readers and the finalization callable remain pending. No production V3 cutover
+follows from internal backend readiness.
 Neither this decision nor a rerun changes resolution identity, callable-only
 writes, revision checks, append-only audit history or Snapshot immutability.
 
@@ -1420,11 +1422,15 @@ server timestamps; a separate fixed-shape command/actor/revision/policy
 fingerprint supports future retry comparison. Strict map conversion, defensive
 Dates, deep immutability and the 2,000-source-entity / 2,000-decisions-plus-manual
 bounds are tested. Source membership still belongs to the trusted reader and
-assembler; exact persisted-byte enforcement belongs to the future writer.
+assembler; the Admin writer applies conservative application payload budgets,
+with Firestore enforcing the final platform limits.
 
-Receipt persistence, Resolution sealing, finalization audit event writes,
-transactions, new callables and Flutter V2 support remain future work. The
-existing production V2.4 writer and extraction path remain unchanged.
+Internal Admin persistence now creates the V2 draft and private receipt, seals
+the Resolution and creates its finalization event in one transaction. Strict
+stored serializers/readers, replay, authorization/revision checks and capacity
+tests are implemented (section 25.7). The finalization callable and Flutter V2
+support remain future work. The existing production V2.4 writer and extraction
+path remain unchanged.
 
 ### 25.1 One canonical destination and explicit versions
 
@@ -1684,9 +1690,10 @@ Create one private, immutable receipt at
 `trips/{tripId}/supplier_extractions/{extractionId}/resolutions/{resolutionId}/finalizations/{commandId}`.
 As in section 24.1, `resolutionId` equals `extractionId`; this adds an audit
 subcollection under the existing Resolution rather than moving that aggregate.
-Direct client writes are denied; reads require the same current owner/Admin
-authorization as the Resolution. This is proposed persistence, not a collection
-created by this documentation change. Its exact conceptual fields are:
+Direct client writes are denied. Current client Rules default-deny this private
+path for both reads and writes; no client access is added by the internal Admin
+writer. Future receipt reads require the same current owner/Admin authorization
+as the Resolution. The internal writer now implements these exact fields:
 
 | Field | Required purpose / contents |
 |---|---|
@@ -1738,7 +1745,7 @@ not operating targets. See the official
 Adopt these stricter **application limits for the first finalizer**:
 
 - Complete canonical root at most **768 KiB**, including field names, values,
-  provenance and metadata using Firestore's size rules, not string length.
+  provenance and metadata under the conservative application calculation below.
 - Its embedded `packageContent` at most **256 KiB** and at most **256 total
   records**, counting accommodation envelopes/options and every statement and
   condition. All existing source/override field limits continue to apply.
@@ -1746,11 +1753,14 @@ Adopt these stricter **application limits for the first finalizer**:
   at most **32 KiB each**. Ledger growth counts toward the receipt limit.
 - At most **2,000 Snapshot entities** and **2,000 current decisions/manual
   items combined** for one assessment, and **16 MiB** total serialized inputs.
-  Load only referenced events needed to validate current decisions; include
-  them in this byte budget. Do not scan unbounded historical events per preview.
+  Events needed for authoritative validation count in this byte budget. The
+  existing stored Resolution validator requires the complete contiguous audit
+  chain; finalization reads it in bounded pages under the same 16 MiB guard,
+  rather than weakening that integrity check. This adds no preview endpoint or
+  unbounded history scan.
 - At most **2 MiB** conservatively budgeted final commit, including document
-  encoding and index effects. Future persistence tests must measure the actual
-  encoding/size accounting; JSON character counts alone are insufficient.
+  encoding/index reserve. The application estimate is not exact SDK encoding or
+  index measurement; JSON character counts alone are insufficient.
 
 Before enabling v2 writes, exempt the large embedded timeline/package/provenance
 and receipt-ledger fields from indexing where they are never queried, while
@@ -1808,16 +1818,83 @@ integrity failure requiring operational inspection, not cleanup or overwrite.
 On a verified uncommitted retry, rerun the preconditions. PDF/client/reuse
 projections are later derived from the committed result version only.
 
+#### Implemented internal Admin boundary
+
+`finalizeSupplierImportAdmin(db, actor, request)` accepts only `tripId`,
+`extractionId`, `commandId`, `expectedRevision` and the supported `policyVersion`.
+The separately trusted actor is `{uid, email}`; the existing Resolution-mutation
+authorization function checks company domain, authoritative active profile,
+Agent/Admin role and current Trip ownership. The engine repeats authorization
+inside the transaction. No caller Snapshot, Resolution, candidate, receipt,
+role, source-package truth or timestamp is accepted.
+
+The writer derives `finalizationId = commandId` and the reserved draft ID
+`supplier-import-${sha256(JSON.stringify([tripId, extractionId]))}` (UTF-8,
+lowercase hex). Resolution identity stays `extractionId`. The canonical path is
+`trips/{tripId}/itinerary_drafts/{draftId}`; receipt and event are the section
+25.6 path and `.../resolutions/{extractionId}/events/{commandId}`. Only the
+internal Admin entry point writes these artifacts; serializers do not persist.
+
+Preflight uses the existing trusted Supplier Source metadata reader and strict
+complete-Snapshot/stored-Resolution boundaries. Child collections use pages of
+at most 32 documents; entity counts, combined decisions/manual counts and input
+bytes are bounded. The Resolution root is read again after its children, and
+the transaction rechecks its exact active revision/root and immutable Snapshot
+root. Every valid child mutation already advances that root atomically, so
+concurrent changes invalidate the plan. Assembly and the existing receipt factory
+run before the transaction; blocked assessment or factory failure writes nothing.
+
+All transactional reads precede the four writes. The draft, receipt and event
+use create-only semantics; the root update contains only `status`, `revision`,
+`resultingDraftId`, `updatedByUid`, `updatedAt`, `finalizedByUid`, `finalizedAt`.
+One backend millisecond timestamp is captured before the retryable callback and
+stored consistently as `Timestamp`. No random identities, clock reads, external
+calls or logging occur inside the callback. Existing mutations reject a sealed
+Resolution permanently.
+
+Exact replay validates the receipt fingerprint/digest, reconstructs the initial
+assembly from immutable Snapshot plus sealed Resolution history, and checks the
+root/event/draft linkage. It returns `already_applied` with no writes or revision
+increment, including after a lost commit acknowledgement. The digest is not
+compared against later edited canonical prose. A different command cannot reopen
+the Resolution; conflicting fingerprints, linkage, digest or partial artifacts
+fail closed. Raw SDK text, error causes and source/commercial text are neither
+logged nor returned. Infrastructure failures expose a generic internal error;
+Firestore resource/known size errors become `persistence_capacity_exceeded`.
+
+`supplierImportFinalizationStored.ts` applies the authoritative V2/receipt
+validators around explicit Timestamp conversion. Root times and timeline dates
+use Firestore Timestamp (UTC midnight for date-only timeline fields); package
+dates remain strings. Non-millisecond stored times are rejected to avoid silent
+loss in the Date-based domain. V1 and unknown versions cannot pass the V2 reader.
+Unknown/undefined values fail; deterministic array/map content is preserved.
+
+`supplierImportFinalizationCapacity.ts` measures UTF-8 JSON payload of plain
+Firestore-compatible values plus document-path, node and map-field overhead.
+The combined budget is twice the four-document estimate plus 4 KiB; nesting is
+bounded below the platform ceiling. This conservative application estimate uses
+no undocumented SDK internals and makes **no exact Firestore protobuf or index
+size claim**. Firestore is the final hard limit. Any exceeded budget blocks
+without truncation or writes. Required index exemptions remain a future rollout
+prerequisite; no index or Rules changes are included here.
+
+Deterministic tests exercise the actual Admin adapter with read-before-write,
+optimistic version retry, create/update preconditions and atomic staged commits,
+including the existing Admin child-mutation adapter. No production connection or
+emulator is required for these tests. No finalization callable, Flutter reader,
+Finalize UI, extraction routing change or deployment is included.
+
 ### 25.8 Rollout boundaries and future verification
 
 No model/prompt/response schema, V2.4 processor, Firebase Rule or client changes
-are made by this decision. Before enabling future finalization, implement and
-test the v2 reader/validator/writer, versioned shared assessment/preview plan,
-bounded receipt protocol, compatible projections and required access/index
-support together. Existing tests expecting package gates stay valid until that
-deliberate implementation change. No job cutover is implied.
+are made by this internal persistence implementation. The backend V2 validator,
+stored reader/writer, shared assessment and bounded atomic receipt protocol now
+have focused tests. Before enabling finalization, implement and test its trusted
+callable, compatible Flutter readers/UI, projections and required access/index
+support together. No job cutover is implied.
 
-Future acceptance tests must prove:
+Backend tests now cover the assembly, persistence and replay cases below;
+future rollout acceptance must also verify client and publication behavior:
 
 - safe untouched package facts and assigned days/services finalize without
   per-fact decisions, preserving every field, count, ordering and provenance;

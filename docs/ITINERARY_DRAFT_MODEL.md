@@ -2,9 +2,10 @@
 
 Sections before **Canonical v2 architecture** describe the implemented legacy
 model. The v2 pure TypeScript model/validator, deterministic Supplier Import
-assembly policy and private finalization receipt domain are implemented. Its
-writer, persistent finalizer, Flutter model, migration, Rules and production
-extraction cutover remain future work.
+assembly policy, private finalization receipt domain and internal Admin atomic
+finalization writer are implemented. The finalization callable, Flutter V2 model,
+migration, client access/index rollout and production extraction cutover remain
+future work.
 
 The pure entry point is `supplierImportV2Assembly.ts`. It consumes a trusted
 complete Snapshot, Resolution aggregate and explicit context (`draftId`, `tripId`,
@@ -17,8 +18,8 @@ carry automatically; explicit decisions and sparse set/clear overrides win.
 Package arrays compact surviving source order; day/service order collisions
 block. Manual content has consultant-origin accounting and no supplier locator.
 Package lineage and the separate accounting retain trusted sources, staged
-identities and correction links. Count capacity is enforced; exact Firestore
-byte size and rechecking authorization/revision remain future writer duties.
+identities and correction links. Count capacity is enforced; the separate Admin
+writer rechecks authorization/revision and applies conservative payload budgets.
 Nothing in this pure policy persists a draft or seals a Resolution.
 
 `createSupplierImportFinalizationReceipt` consumes a successful assembly plus
@@ -31,9 +32,55 @@ dispositions, mapping fields and correction/movement operations, without copying
 source text or canonical content. Strict map conversion uses UTC ISO timestamps
 and immutable domain Dates. Source membership remains the trusted assembly's
 responsibility; receipt creation checks linkage, canonical digest and output
-coverage. Domain entity/decision/manual count limits are enforced; exact persisted
-byte capacity remains a future writer responsibility. No receipt persistence,
-Resolution seal, finalization audit write or callable is implemented.
+coverage. Domain entity/decision/manual count limits are enforced. The Admin
+writer now persists the receipt, Resolution seal and event atomically with the
+canonical V2 draft. There is still no finalization callable.
+
+### Internal Admin V2 persistence
+
+`finalizeSupplierImportAdmin(db, actor, request)` is the sole finalization write
+entry point. Its strict request is `{tripId, extractionId, commandId,
+expectedRevision, policyVersion}`; the future trusted caller supplies `{uid,
+email}` separately. Role and current Trip ownership come from Firestore. It loads
+and validates the complete trusted Snapshot and current Resolution, uses the
+existing assembly and receipt factory, then rechecks authorization, Snapshot
+root and Resolution revision/status inside the transaction. Blocked assessment
+returns safe findings with no writes.
+
+The four atomic writes are:
+
+- Create `trips/{tripId}/itinerary_drafts/{draftId}` as `itinerary_draft_v2`.
+- Create `trips/{tripId}/supplier_extractions/{extractionId}/resolutions/{extractionId}/finalizations/{commandId}`.
+- Seal the existing Resolution root `active -> finalized`, advancing exactly
+  `R -> R+1` with its defined result/actor/time fields.
+- Create `.../resolutions/{extractionId}/events/{commandId}` using the existing
+  `finalize` event contract.
+
+The reserved draft ID is `supplier-import-` plus lowercase SHA-256 of the UTF-8
+JSON tuple `[tripId, extractionId]`; `finalizationId = commandId`. IDs, policy,
+candidate, receipt and logical server time are fixed before transaction retries.
+An exact committed replay returns `already_applied` without writing. Replay
+reconstructs the initial digest from sealed inputs; later canonical prose edits
+are neither overwritten nor compared with the original digest. The immutable
+draft linkage, receipt, root and event must agree. Conflicting or partial tuples
+fail closed and are never repaired by this operation.
+
+Strict Admin serializers/readers distinguish V2 from V1/unknown versions, reject
+unknown or undefined fields and store metadata/timeline dates as Firestore
+`Timestamp` values. Timeline date-only values use UTC midnight; package dates
+remain date-only strings. The domain uses millisecond precision: readers reject
+sub-millisecond stored values instead of silently rounding. V1 persistence is
+unchanged. Serializers have no independent persistence API.
+
+The writer enforces 768 KiB canonical, 256 KiB package-content, 256 KiB receipt,
+32 KiB sealed-root/event, 16 MiB input and 2 MiB combined-commit application
+budgets, plus existing entity/record bounds. The calculation includes UTF-8
+payload, path and structural overhead; the combined budget adds a 100% reserve
+and 4 KiB. This is **not exact Firestore protobuf/document/index size**. Firestore
+remains the final limit; size/resource rejections return a safe capacity outcome.
+No content is truncated. See staging-model section 25.7 for loading, capacity
+and rollout details. No callable, Flutter V2 reader/UI or production routing is
+connected to this internal engine.
 
 `KayraItineraryDraft` is the editable, provider-neutral itinerary structure used
 after supplier material has been organized. It contains client-facing travel
@@ -106,9 +153,9 @@ external to the map. Transport maps use UTC ISO timestamps and date-only
 timeline strings; validated timeline/metadata dates retain the existing `Date`
 semantics with defensive copies. Package dates remain date-only strings.
 Validation freezes detached nested values, rejects malformed ordering instead
-of sorting it, and enforces the 256 package-record limit. Exact Firestore byte
-capacity and authoritative source membership remain future trusted-boundary
-checks; this API performs neither persistence nor Snapshot/Resolution assembly.
+of sorting it, and enforces the 256 package-record limit. Authoritative source
+membership and conservative persistence budgets are separate Admin boundaries;
+this pure API performs neither persistence nor Snapshot/Resolution assembly.
 
 Choose **one versioned canonical draft root with embedded first-class package
 content** at the existing `trips/{tripId}/itinerary_drafts/{draftId}` path.
@@ -159,15 +206,16 @@ must get an explicit origin-aware contract; it cannot populate `importResult`
 with another Trip's private identity.
 
 Keep V2.4 extraction and its exact writer/validator unchanged. The V3 machine
-job still produces `supplier_extraction_snapshot_v1`; only the later trusted
+job still produces `supplier_extraction_snapshot_v1`; only the trusted internal
 finalizer produces `itinerary_draft_v2`. Neither the job contract
 `supplier_extraction_v1` nor the current sparse Resolution decision shapes need
 to be reinterpreted as canonical v2. Finalization policy is separately versioned.
 Existing finalized results and their historical policies never change.
 
-Deploying future v2 support requires version-aware Flutter/backend readers,
-strict validators, a trusted writer/finalizer and deliberate Rules/index work
-before enabling writes. Old v1 clients cannot read/write v2 through their strict
+The backend validators, stored reader and internal writer/finalizer are now
+implemented. Deploying v2 still requires version-aware Flutter readers, a trusted
+callable and deliberate client access/index work before enabling writes.
+Old v1 clients cannot read/write v2 through their strict
 parser; keep the writer gated until compatible clients are available. Do not
 make old clients silently discard new fields on save. No destructive migration
 of old drafts or quotations is part of this rollout.
