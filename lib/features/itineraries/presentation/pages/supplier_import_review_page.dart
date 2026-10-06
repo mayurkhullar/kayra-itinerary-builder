@@ -4,6 +4,7 @@ import '../../../../core/layout/app_layout.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../shared/widgets/kayra_content_frame.dart';
 import '../../domain/supplier_extraction_fact.dart';
+import '../../domain/supplier_extraction_snapshot.dart';
 import '../../domain/supplier_import_resolution_mutation.dart';
 import '../controllers/supplier_import_review_controller.dart';
 import '../controllers/supplier_import_review_dependencies.dart';
@@ -13,6 +14,9 @@ import '../widgets/supplier_import/review_session_panel.dart';
 import '../widgets/supplier_import/review_summary.dart';
 import '../widgets/supplier_import/snapshot_itinerary.dart';
 import '../widgets/supplier_import/snapshot_package_facts.dart';
+import '../widgets/supplier_import/staged_day_decision_dialog.dart';
+import '../widgets/supplier_import/staged_day_decision_panel.dart';
+import '../widgets/supplier_import/staged_day_review_data.dart';
 import '../widgets/supplier_import/staged_service_decision_dialog.dart';
 import '../widgets/supplier_import/staged_service_decision_panel.dart';
 import '../widgets/supplier_import/staged_service_review_data.dart';
@@ -37,25 +41,37 @@ class SupplierImportReviewPage extends StatefulWidget {
 class _SupplierImportReviewPageState extends State<SupplierImportReviewPage> {
   late SupplierImportReviewController _controller;
   final _noticeKey = GlobalKey();
-  bool _serviceDialogOpen = false;
+  bool _decisionDialogOpen = false;
 
-  Future<void> _reviewService(SupplierExtractionServiceFact service) async {
+  Future<void> _reviewService(SupplierExtractionServiceFact service) =>
+      _reviewDecision(
+        (review) =>
+            StagedServiceDecisionDialog(service: service, review: review),
+      );
+
+  Future<void> _reviewDay(SupplierExtractionStagedDay day) => _reviewDecision(
+    (review) =>
+        StagedDayDecisionDialog(day: day, review: StagedDayReviewData(review)),
+  );
+
+  Future<void> _reviewDecision(
+    Widget Function(StagedServiceReviewData) editor,
+  ) async {
     final controller = _controller;
     final state = controller.state;
-    if (_serviceDialogOpen || state.loaded == null) return;
+    if (_decisionDialogOpen || state.loaded == null) return;
     final review = StagedServiceReviewData(state);
     if (!review.canReview) return;
     // Only guards duplicate dialogs. Mutation concurrency belongs to controller.
-    _serviceDialogOpen = true;
+    _decisionDialogOpen = true;
     final SupplierImportResolutionMutationCommand? command;
     try {
       command = await showDialog<SupplierImportResolutionMutationCommand>(
         context: context,
-        builder: (_) =>
-            StagedServiceDecisionDialog(service: service, review: review),
+        builder: (_) => editor(review),
       );
     } finally {
-      _serviceDialogOpen = false;
+      _decisionDialogOpen = false;
     }
     // A dialog created against a replaced/refreshed session cannot submit.
     if (!mounted ||
@@ -232,6 +248,11 @@ class _SupplierImportReviewPageState extends State<SupplierImportReviewPage> {
                         SnapshotReviewIssues(snapshot: loaded.snapshot),
                         SnapshotItinerary(
                           snapshot: loaded.snapshot,
+                          dayReviewBuilder: (day) => StagedDayDecisionPanel(
+                            day: day,
+                            review: StagedDayReviewData(serviceReview!),
+                            onReview: () => _reviewDay(day),
+                          ),
                           serviceReviewBuilder: (service) =>
                               StagedServiceDecisionPanel(
                                 service: service,

@@ -52,7 +52,7 @@ class ReviewSessionPanel extends StatelessWidget {
             SupplierImportReviewNotStarted() =>
               'Starting review creates the consultant review record. Viewing this page does not.',
             SupplierImportReviewActive() =>
-              'Review service placement or exclude a service. Supplier source content stays unchanged.',
+              'Review days and service placement. Supplier source content stays unchanged.',
             SupplierImportReviewFinalized() =>
               'This review is finalized and locked. Original content and review history remain available.',
           }),

@@ -5,6 +5,7 @@ import '../../../domain/supplier_extraction_fact.dart';
 import '../../../domain/supplier_extraction_snapshot.dart';
 import '../../../domain/supplier_import_resolution_mutation.dart';
 import '../../../domain/supplier_import_resolution_overrides.dart';
+import 'review_exclusion_note.dart';
 import 'staged_service_review_data.dart';
 
 enum _ServiceAction { retain, assign, exclude, revert }
@@ -299,18 +300,4 @@ class _StagedServiceDecisionDialogState
 String? validateServiceExclusionNote(
   String note,
   SupplierImportExclusionReason? reason,
-) {
-  if (note.isEmpty) {
-    return reason == SupplierImportExclusionReason.other
-        ? 'Explain why this service is being excluded.'
-        : null;
-  }
-  if (note.length > 2000) return 'Use 2,000 characters or fewer.';
-  if (RegExp(
-    r'(?:\b(?:price|amount|currency|supplement|markup|margin|discount|payment)\b|[$€£₹])',
-    caseSensitive: false,
-  ).hasMatch(note)) {
-    return 'Use a non-commercial explanation for this exclusion.';
-  }
-  return null;
-}
+) => validateReviewExclusionNote(note, reason, subject: 'service');

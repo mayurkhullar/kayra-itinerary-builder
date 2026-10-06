@@ -11,9 +11,11 @@ class SnapshotItinerary extends StatelessWidget {
     super.key,
     required this.snapshot,
     this.serviceReviewBuilder,
+    this.dayReviewBuilder,
   });
   final SupplierExtractionSnapshot snapshot;
   final Widget Function(SupplierExtractionServiceFact)? serviceReviewBuilder;
+  final Widget Function(SupplierExtractionStagedDay)? dayReviewBuilder;
   @override
   Widget build(BuildContext context) {
     final services = snapshot.facts.whereType<SupplierExtractionServiceFact>();
@@ -78,6 +80,7 @@ class SnapshotItinerary extends StatelessWidget {
                             ),
                             ReviewText(day.notes, label: 'Day notes'),
                             ReviewSources(day.sources),
+                            ?dayReviewBuilder?.call(day),
                             for (final service in services.where(
                               (service) =>
                                   service.scope is SupplierExtractionDayScope &&

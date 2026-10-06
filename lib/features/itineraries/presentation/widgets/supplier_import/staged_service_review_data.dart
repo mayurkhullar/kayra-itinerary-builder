@@ -58,9 +58,29 @@ final class StagedServiceReviewData {
   }
 
   bool isRetainedDay(SupplierExtractionStagedDay day) {
-    final decision = _decisions[day.id];
-    return decision is! SupplierImportDayDecision ||
-        decision.disposition != SupplierImportRetainDisposition.exclude;
+    return dayDecisionFor(day.id)?.disposition !=
+        SupplierImportRetainDisposition.exclude;
+  }
+
+  SupplierImportDayDecision? dayDecisionFor(String dayId) {
+    final decision = _decisions[dayId];
+    return decision is SupplierImportDayDecision &&
+            decision.targetEntityId == dayId
+        ? decision
+        : null;
+  }
+
+  /// Current placement used by both service ordering and day-exclusion preflight.
+  SupplierImportDayReference? effectiveDayFor(
+    SupplierExtractionServiceFact service,
+  ) {
+    final decision = decisionFor(service.id);
+    if (decision?.disposition == SupplierImportRetainDisposition.exclude) {
+      return null;
+    }
+    final sourceId = sourceDayId(service);
+    return decision?.day ??
+        (sourceId == null ? null : SupplierImportStagedDayReference(sourceId));
   }
 
   bool canRetainSource(SupplierExtractionServiceFact service) {
@@ -183,10 +203,7 @@ final class StagedServiceReviewData {
       }
       final sourceId = sourceDayId(fact);
       consider(
-        decision?.day ??
-            (sourceId == null
-                ? null
-                : SupplierImportStagedDayReference(sourceId)),
+        effectiveDayFor(fact),
         decision?.canonicalOrder ??
             (decision?.day == null && sourceId != null ? fact.order : null),
       );
