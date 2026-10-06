@@ -8,6 +8,7 @@ import '../../../domain/supplier_import_resolution_mutation.dart';
 import '../../../domain/supplier_import_resolution_overrides.dart';
 import '../../controllers/supplier_import_review_state.dart';
 import 'review_components.dart';
+import 'staged_service_correction.dart';
 
 /// Presentation of current decisions, never inferred from audit history.
 final class StagedServiceReviewData {
@@ -87,6 +88,45 @@ final class StagedServiceReviewData {
     final id = sourceDayId(service);
     final day = id == null ? null : dayById(id);
     return day != null && isRetainedDay(day);
+  }
+
+  bool canCorrect(SupplierExtractionServiceFact service) =>
+      canReview &&
+      decisionFor(service.id)?.disposition !=
+          SupplierImportRetainDisposition.exclude &&
+      effectiveDayFor(service) != null;
+
+  bool canCorrectField(
+    SupplierExtractionServiceFact service,
+    StagedServiceCorrectionField field,
+  ) =>
+      canCorrect(service) &&
+      field.supportsSource(service) &&
+      (field.branch == null ||
+          field.branch ==
+              (decisionFor(service.id)?.overrides.serviceType?.value ??
+                      service.serviceType)
+                  ?.value);
+
+  SupplierImportServiceDecision correctField(
+    SupplierExtractionServiceFact service,
+    StagedServiceCorrectionField field,
+    SupplierImportFieldOverride<Object?>? value,
+  ) {
+    final current = decisionFor(service.id);
+    return SupplierImportServiceDecision(
+      targetEntityId: service.id,
+      disposition:
+          current?.disposition ?? SupplierImportRetainDisposition.retain,
+      day: current?.day,
+      canonicalOrder: current?.canonicalOrder,
+      overrides: field.replaceIn(
+        current?.overrides ?? const SupplierImportServiceOverrides(),
+        value,
+      ),
+      exclusionReason: current?.exclusionReason,
+      exclusionNote: current?.exclusionNote,
+    );
   }
 
   List<SupplierExtractionStagedDay> targetsFor(

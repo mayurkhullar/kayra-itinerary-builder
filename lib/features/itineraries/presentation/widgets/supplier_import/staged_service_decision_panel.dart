@@ -4,6 +4,7 @@ import '../../../../../core/theme/app_spacing.dart';
 import '../../../domain/supplier_extraction_fact.dart';
 import '../../controllers/supplier_import_review_state.dart';
 import 'review_components.dart';
+import 'staged_service_corrections.dart';
 import 'staged_service_review_data.dart';
 
 /// Consultant intent stays separate from the immutable source content above.
@@ -34,6 +35,7 @@ class StagedServiceDecisionPanel extends StatelessWidget {
               ('Exclusion reason', exclusionReasonLabel(reason)),
             ('Exclusion note', decision?.exclusionNote),
           ]),
+          StagedServiceCorrections(service: service, review: review),
           if (pending)
             Semantics(
               liveRegion: true,

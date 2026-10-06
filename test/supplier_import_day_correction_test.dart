@@ -832,8 +832,9 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     await tap(tester, 'service-review-action-staged-service-1');
-    expect(find.text('Corrections'), findsNothing);
-    expect(find.text('Correct title'), findsNothing);
+    expect(find.text('Corrections'), findsOneWidget);
+    expect(key('correct-service-title'), findsOneWidget);
+    expect(key('correct-day-title'), findsNothing);
   });
   test(
     'correction presentation has no direct transport, Trip date access, AI or finalization',
