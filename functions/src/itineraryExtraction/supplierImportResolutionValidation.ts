@@ -61,6 +61,7 @@ import {
   supplierImportResolutionSchemaVersion,
 } from "./supplierImportResolution";
 import {validSourceIdentity} from "./sourceReaderValidation";
+import {containsCommercialTerm} from "./nonCommercialText";
 
 type RecordValue = Record<string, unknown>;
 
@@ -1319,13 +1320,11 @@ function commandIdentity(input: unknown, label: string): string {
   return value;
 }
 
-const commercialPattern = /(?:\b(?:price|amount|currency|supplement|markup|margin|discount|payment)\b|[$€£₹])/iu;
-
 function text(input: unknown, label: string): string {
   if (typeof input !== "string") invalid(`${label} must be text.`);
   const value = input.trim().replace(/\s+/gu, " ");
   if (value.length === 0 || value.length > 2000) invalid(`${label} is invalid.`);
-  if (commercialPattern.test(value)) invalid(`${label} contains commercial content.`);
+  if (containsCommercialTerm(value)) invalid(`${label} contains commercial content.`);
   return value;
 }
 

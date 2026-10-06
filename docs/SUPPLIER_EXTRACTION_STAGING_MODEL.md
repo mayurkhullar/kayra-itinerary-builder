@@ -3,8 +3,9 @@
 **Architecture decision, 2026-10-06:** section 25 resolves the canonical package
 destination and future exception-driven finalization policy. It supersedes the
 earlier destination-neutral discussion, not the running implementation. The
-current validators/assessment still use the old package-destination gate;
-canonical v2, its finalizer and its review-policy changes are not implemented.
+current assessment still uses the old package-destination gate. The canonical
+v2 pure TypeScript domain now exists; its persistence, finalizer and review-policy
+changes are not implemented.
 Ordinary production extraction remains on V2.4.
 
 ## 1. Problem statement

@@ -33,6 +33,7 @@ import {
   TrustedSupplierSourcePackage,
   validSourceIdentity,
 } from "./sourceReaderValidation";
+import {containsCommercialValue} from "./nonCommercialText";
 
 export type SupplierExtractionSnapshotErrorCode =
   "INVALID_SUPPLIER_EXTRACTION";
@@ -1187,20 +1188,9 @@ function requiredText(value: unknown, label: string): string {
   return value.trim();
 }
 
-const currencyCode = "(?:INR|USD|EUR|GBP|AED|AUD|CAD|CHF|JPY|SGD|THB)";
-const commercialValuePattern = new RegExp([
-  `(?:[$€£₹]\\s*\\d)`,
-  `(?:\\d[\\d,.]*\\s*(?:[$€£₹]|${currencyCode}\\b))`,
-  `(?:\\b${currencyCode}\\s*\\d)`,
-  "(?:\\b(?:price|pricing|cost|total|amount|rate|supplement|margin|payment)" +
-    "\\b[^.!?\\n]{0,32}\\d)",
-  "(?:\\d[^.!?\\n]{0,32}\\b(?:price|pricing|cost|total|amount|rate|" +
-    "supplement|margin|payment)\\b)",
-].join("|"), "i");
-
 function requiredSemanticText(value: unknown, label: string): string {
   const text = requiredText(value, label);
-  if (commercialValuePattern.test(text)) {
+  if (containsCommercialValue(text)) {
     invalid(`${label} must not contain a commercial amount or currency.`);
   }
   return text;

@@ -1,8 +1,9 @@
 # Structured itinerary draft model
 
 Sections before **Canonical v2 architecture** describe the implemented legacy
-model. The v2 section is a decided future contract, not an implemented model,
-writer, migration, Rules change or production extraction cutover.
+model. The v2 pure TypeScript model/validator is implemented; its writer,
+finalizer, Flutter model, migration, Rules and production extraction cutover
+remain future work.
 
 `KayraItineraryDraft` is the editable, provider-neutral itinerary structure used
 after supplier material has been organized. It contains client-facing travel
@@ -67,6 +68,17 @@ job's `processing` to `completed` transition occur in one Firestore transaction.
 This prevents a completed draft from becoming orphaned behind an unfinished job.
 
 ## Canonical v2 architecture
+
+The pure backend entry point is `itineraryDraftV2Validation.ts`:
+`validateItineraryDraftV2(id, map)` / `itineraryDraftV2FromMap`,
+`itineraryDraftV2ToMap` and `serializeItineraryDraftV2`. The document ID is
+external to the map. Transport maps use UTC ISO timestamps and date-only
+timeline strings; validated timeline/metadata dates retain the existing `Date`
+semantics with defensive copies. Package dates remain date-only strings.
+Validation freezes detached nested values, rejects malformed ordering instead
+of sorting it, and enforces the 256 package-record limit. Exact Firestore byte
+capacity and authoritative source membership remain future trusted-boundary
+checks; this API performs neither persistence nor Snapshot/Resolution assembly.
 
 Choose **one versioned canonical draft root with embedded first-class package
 content** at the existing `trips/{tripId}/itinerary_drafts/{draftId}` path.
