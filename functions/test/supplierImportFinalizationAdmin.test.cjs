@@ -247,5 +247,6 @@ test('Admin engine remains internal and logs no source/canonical/SDK payload', (
     const text = fs.readFileSync(path.join(dir, file), 'utf8');
     assert(!/from ["']firebase\//.test(text)); assert(!/console\.|logger\.|onCall\(|generateContent\(|fetch\(/.test(text));
   }
-  const index = fs.readFileSync(path.join(__dirname, '../src/index.ts'), 'utf8'); assert(!index.includes('finalizeSupplierImport'));
+  // The callable may delegate to this engine; persistence remains internal.
+  assert(!fs.readFileSync(path.join(dir, 'supplierImportFinalizationAdmin.ts'), 'utf8').includes('onCall('));
 });

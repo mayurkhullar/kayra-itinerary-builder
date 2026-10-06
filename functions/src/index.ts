@@ -15,6 +15,8 @@ import {
 import {
   applySupplierImportResolutionMutationAdmin,
 } from "./itineraryExtraction/supplierImportResolutionMutationAdmin";
+import {handleSupplierImportFinalization} from "./itineraryExtraction/supplierImportFinalizationCallable";
+import {finalizeSupplierImportAdmin} from "./itineraryExtraction/supplierImportFinalizationAdmin";
 export {
   processItineraryExtractionJob,
 } from "./itineraryExtraction/trigger";
@@ -52,6 +54,15 @@ export const applySupplierImportResolutionMutation = onCall(
         (event, fields) => logger.info(event, fields),
       ),
     },
+    (event, fields) => logger.info(event, fields),
+  ),
+);
+
+export const finalizeSupplierImport = onCall(
+  {region: "asia-south2"},
+  async (request) => handleSupplierImportFinalization(
+    request,
+    {finalize: (actor, input) => finalizeSupplierImportAdmin(getFirestore(), actor, input)},
     (event, fields) => logger.info(event, fields),
   ),
 );

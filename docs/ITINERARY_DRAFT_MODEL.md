@@ -3,7 +3,8 @@
 Sections before **Canonical v2 architecture** describe the implemented legacy
 model. The v2 pure TypeScript model/validator, deterministic Supplier Import
 assembly policy, private finalization receipt domain and internal Admin atomic
-finalization writer are implemented. The finalization callable, Flutter V2 model,
+finalization writer and authenticated finalization callable are implemented.
+The callable is not deployed. The Flutter V2 model,
 migration, client access/index rollout and production extraction cutover remain
 future work.
 
@@ -34,13 +35,14 @@ and immutable domain Dates. Source membership remains the trusted assembly's
 responsibility; receipt creation checks linkage, canonical digest and output
 coverage. Domain entity/decision/manual count limits are enforced. The Admin
 writer now persists the receipt, Resolution seal and event atomically with the
-canonical V2 draft. There is still no finalization callable.
+canonical V2 draft. The authenticated callable delegates to this engine without
+changing its assembly, persistence or idempotency semantics.
 
 ### Internal Admin V2 persistence
 
 `finalizeSupplierImportAdmin(db, actor, request)` is the sole finalization write
 entry point. Its strict request is `{tripId, extractionId, commandId,
-expectedRevision, policyVersion}`; the future trusted caller supplies `{uid,
+expectedRevision, policyVersion}`; the authenticated callable supplies `{uid,
 email}` separately. Role and current Trip ownership come from Firestore. It loads
 and validates the complete trusted Snapshot and current Resolution, uses the
 existing assembly and receipt factory, then rechecks authorization, Snapshot
@@ -79,8 +81,36 @@ payload, path and structural overhead; the combined budget adds a 100% reserve
 and 4 KiB. This is **not exact Firestore protobuf/document/index size**. Firestore
 remains the final limit; size/resource rejections return a safe capacity outcome.
 No content is truncated. See staging-model section 25.7 for loading, capacity
-and rollout details. No callable, Flutter V2 reader/UI or production routing is
-connected to this internal engine.
+and rollout details. The callable described below is connected in source only;
+there is no Flutter V2 reader/Finalize UI or production routing change.
+
+### Authenticated finalization callable (not deployed)
+
+`finalizeSupplierImport` is a Gen2 callable in `asia-south2`, using the existing
+Node 22 runtime and Admin initialization. It accepts exactly `tripId`,
+`extractionId`, `commandId`, `expectedRevision`, `policyVersion`. The existing
+Admin request validator enforces bounded exact identities, a positive safe
+revision with a safe `R+1`, and the authoritative
+`supplier_import_exception_review_v1` policy. Unknown fields and missing/defaulted
+policy are rejected. UID/email come only from authenticated identity; current
+profile/Trip authorization remains in the Admin engine.
+
+One engine invocation receives command/revision/policy unchanged; the wrapper
+does not retry conflicts or generate identities. `applied`/`already_applied`
+return only `outcome`, `resolutionId`, `revision`, `resultingDraftId`.
+`not_ready` returns an assessment with resolution/revision, `canFinalize: false`,
+and blockers/warnings containing only `code`, `targetKind`, `targetId`.
+`resolution_conflict` returns `currentRevision`; `resolution_not_started` and
+`resolution_finalized` return `revision`, with `outcome`/`resolutionId` in each.
+`persistence_capacity_exceeded` returns `outcome`, `resolutionId`, `boundary`.
+No receipt, candidate or raw source/Resolution payload is exposed.
+
+Missing authentication maps to `unauthenticated`, authorization to
+`permission-denied`, malformed requests to `invalid-argument`, unavailable
+Snapshot/invalid trusted state to `failed-precondition`, and infrastructure
+failures to a sanitized `internal` error. Logs contain only function name and
+safe outcome/error code. Nothing is deployed; Flutter finalization and production
+V3 request cutover remain separate tasks. Production requests remain V2.4-only.
 
 `KayraItineraryDraft` is the editable, provider-neutral itinerary structure used
 after supplier material has been organized. It contains client-facing travel
@@ -214,7 +244,7 @@ Existing finalized results and their historical policies never change.
 
 The backend validators, stored reader and internal writer/finalizer are now
 implemented. Deploying v2 still requires version-aware Flutter readers, a trusted
-callable and deliberate client access/index work before enabling writes.
+callable deployment and deliberate client access/index work before enabling writes.
 Old v1 clients cannot read/write v2 through their strict
 parser; keep the writer gated until compatible clients are available. Do not
 make old clients silently discard new fields on save. No destructive migration

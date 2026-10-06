@@ -230,6 +230,7 @@ test('real entrypoint exports exactly the expected Functions', () => {
   assert.deepEqual(Object.keys(functions).sort(), [
     'applySupplierImportResolutionMutation',
     'cleanupSupplierSourceUpload',
+    'finalizeSupplierImport',
     'processItineraryExtractionJob',
     'requestItineraryExtraction',
   ]);
