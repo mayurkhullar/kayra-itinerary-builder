@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../../core/layout/app_layout.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../shared/widgets/kayra_content_frame.dart';
+import '../../domain/supplier_extraction_fact.dart';
+import '../../domain/supplier_import_resolution_mutation.dart';
 import '../controllers/supplier_import_review_controller.dart';
 import '../controllers/supplier_import_review_dependencies.dart';
 import '../controllers/supplier_import_review_state.dart';
@@ -11,6 +13,9 @@ import '../widgets/supplier_import/review_session_panel.dart';
 import '../widgets/supplier_import/review_summary.dart';
 import '../widgets/supplier_import/snapshot_itinerary.dart';
 import '../widgets/supplier_import/snapshot_package_facts.dart';
+import '../widgets/supplier_import/staged_service_decision_dialog.dart';
+import '../widgets/supplier_import/staged_service_decision_panel.dart';
+import '../widgets/supplier_import/staged_service_review_data.dart';
 
 class SupplierImportReviewPage extends StatefulWidget {
   const SupplierImportReviewPage({
@@ -31,6 +36,50 @@ class SupplierImportReviewPage extends StatefulWidget {
 
 class _SupplierImportReviewPageState extends State<SupplierImportReviewPage> {
   late SupplierImportReviewController _controller;
+  final _noticeKey = GlobalKey();
+  bool _serviceDialogOpen = false;
+
+  Future<void> _reviewService(SupplierExtractionServiceFact service) async {
+    final controller = _controller;
+    final state = controller.state;
+    if (_serviceDialogOpen || state.loaded == null) return;
+    final review = StagedServiceReviewData(state);
+    if (!review.canReview) return;
+    // Only guards duplicate dialogs. Mutation concurrency belongs to controller.
+    _serviceDialogOpen = true;
+    final SupplierImportResolutionMutationCommand? command;
+    try {
+      command = await showDialog<SupplierImportResolutionMutationCommand>(
+        context: context,
+        builder: (_) =>
+            StagedServiceDecisionDialog(service: service, review: review),
+      );
+    } finally {
+      _serviceDialogOpen = false;
+    }
+    // A dialog created against a replaced/refreshed session cannot submit.
+    if (!mounted ||
+        controller != _controller ||
+        !identical(state, controller.state)) {
+      return;
+    }
+    switch (command) {
+      case SupplierImportSetDecisionCommand(:final decision):
+        await controller.setDecision(decision);
+      case SupplierImportRemoveDecisionCommand(:final decisionId):
+        await controller.removeDecision(decisionId);
+      default:
+        return;
+    }
+    if (!mounted || controller != _controller) return;
+    if (controller.state is SupplierImportReviewConflict ||
+        controller.state is SupplierImportReviewFailed) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final notice = _noticeKey.currentContext;
+        if (mounted && notice != null) Scrollable.ensureVisible(notice);
+      });
+    }
+  }
 
   @override
   void initState() {
@@ -77,6 +126,9 @@ class _SupplierImportReviewPageState extends State<SupplierImportReviewPage> {
   Widget build(BuildContext context) {
     final state = _controller.state;
     final loaded = state.loaded;
+    final serviceReview = loaded == null
+        ? null
+        : StagedServiceReviewData(state);
     final busy =
         state is SupplierImportReviewInitial ||
         state is SupplierImportReviewLoading ||
@@ -141,6 +193,7 @@ class _SupplierImportReviewPageState extends State<SupplierImportReviewPage> {
               ),
               const SizedBox(height: AppSpacing.s24),
               ReviewStateNotice(
+                key: _noticeKey,
                 state: state,
                 onRefresh: _controller.refresh,
                 onRetry: _controller.retryPendingMutation,
@@ -177,7 +230,15 @@ class _SupplierImportReviewPageState extends State<SupplierImportReviewPage> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         SnapshotReviewIssues(snapshot: loaded.snapshot),
-                        SnapshotItinerary(snapshot: loaded.snapshot),
+                        SnapshotItinerary(
+                          snapshot: loaded.snapshot,
+                          serviceReviewBuilder: (service) =>
+                              StagedServiceDecisionPanel(
+                                service: service,
+                                review: serviceReview!,
+                                onReview: () => _reviewService(service),
+                              ),
+                        ),
                         SnapshotPackageFacts(snapshot: loaded.snapshot),
                         ReviewHistory(loaded: loaded),
                       ],

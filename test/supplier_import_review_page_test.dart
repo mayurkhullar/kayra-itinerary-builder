@@ -738,29 +738,26 @@ void main() {
     expect(h.mutations.requests, isEmpty);
   });
 
-  test(
-    'page delegates only session actions and has no direct Firebase writes',
-    () {
-      final page = File(
-        'lib/features/itineraries/presentation/pages/supplier_import_review_page.dart',
-      ).readAsStringSync();
-      for (final forbidden in [
-        'FirebaseFirestore',
-        'FirebaseFunctions',
-        'setDecision(',
-        'removeDecision(',
-        'upsertManualItem(',
-        'removeManualItem(',
-        'finalize(',
-      ]) {
-        expect(page, isNot(contains(forbidden)));
-      }
-      expect(page, contains('_controller.startReview'));
-      expect(page, contains('_controller.refresh'));
-      expect(page, contains('_controller.retryPendingMutation'));
-      expect(page, contains('..dispose()'));
-    },
-  );
+  test('page delegates review actions and has no direct Firebase writes', () {
+    final page = File(
+      'lib/features/itineraries/presentation/pages/supplier_import_review_page.dart',
+    ).readAsStringSync();
+    for (final forbidden in [
+      'FirebaseFirestore',
+      'FirebaseFunctions',
+      'upsertManualItem(',
+      'removeManualItem(',
+      'finalize(',
+    ]) {
+      expect(page, isNot(contains(forbidden)));
+    }
+    expect(page, contains('_controller.startReview'));
+    expect(page, contains('_controller.refresh'));
+    expect(page, contains('_controller.retryPendingMutation'));
+    expect(page, contains('controller.setDecision(decision)'));
+    expect(page, contains('controller.removeDecision(decisionId)'));
+    expect(page, contains('..dispose()'));
+  });
 }
 
 SupplierExtractionSnapshot _emptySnapshot({

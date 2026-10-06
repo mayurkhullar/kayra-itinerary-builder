@@ -7,8 +7,13 @@ import '../../../domain/supplier_extraction_values.dart';
 import 'review_components.dart';
 
 class SnapshotItinerary extends StatelessWidget {
-  const SnapshotItinerary({super.key, required this.snapshot});
+  const SnapshotItinerary({
+    super.key,
+    required this.snapshot,
+    this.serviceReviewBuilder,
+  });
   final SupplierExtractionSnapshot snapshot;
+  final Widget Function(SupplierExtractionServiceFact)? serviceReviewBuilder;
   @override
   Widget build(BuildContext context) {
     final services = snapshot.facts.whereType<SupplierExtractionServiceFact>();
@@ -86,7 +91,10 @@ class SnapshotItinerary extends StatelessWidget {
                                 ),
                                 child: Divider(),
                               ),
-                              SnapshotService(service: service),
+                              SnapshotService(
+                                service: service,
+                                review: serviceReviewBuilder?.call(service),
+                              ),
                             ],
                           ],
                         ),
@@ -107,7 +115,10 @@ class SnapshotItinerary extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: reviewSeparated(
                   unassigned.map(
-                    (service) => SnapshotService(service: service),
+                    (service) => SnapshotService(
+                      service: service,
+                      review: serviceReviewBuilder?.call(service),
+                    ),
                   ),
                 ),
               ),
@@ -119,8 +130,9 @@ class SnapshotItinerary extends StatelessWidget {
 }
 
 class SnapshotService extends StatelessWidget {
-  const SnapshotService({super.key, required this.service});
+  const SnapshotService({super.key, required this.service, this.review});
   final SupplierExtractionServiceFact service;
+  final Widget? review;
   @override
   Widget build(BuildContext context) {
     final title =
@@ -186,6 +198,7 @@ class SnapshotService extends StatelessWidget {
         ],
         ReviewText(service.notes, label: 'Service notes'),
         ReviewSources(service.sources),
+        ?review,
       ],
     );
   }
