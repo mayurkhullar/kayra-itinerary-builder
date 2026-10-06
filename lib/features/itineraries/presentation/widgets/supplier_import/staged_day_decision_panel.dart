@@ -5,6 +5,7 @@ import '../../../domain/supplier_extraction_snapshot.dart';
 import '../../../domain/supplier_import_resolution_decision.dart';
 import '../../controllers/supplier_import_review_state.dart';
 import 'review_components.dart';
+import 'staged_day_corrections.dart';
 import 'staged_day_review_data.dart';
 import 'staged_service_review_data.dart';
 
@@ -36,6 +37,7 @@ class StagedDayDecisionPanel extends StatelessWidget {
             ('Exclusion reason', exclusionReasonLabel(reason)),
           ('Exclusion note', decision?.exclusionNote),
         ]),
+        StagedDayCorrections(day: day, review: review),
         if (review.isPending(day))
           Padding(
             padding: const EdgeInsets.only(top: AppSpacing.s8),

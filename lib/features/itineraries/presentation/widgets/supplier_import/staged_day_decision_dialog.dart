@@ -5,6 +5,9 @@ import '../../../domain/supplier_extraction_snapshot.dart';
 import '../../../domain/supplier_import_resolution_mutation.dart';
 import '../../../domain/supplier_import_resolution_overrides.dart';
 import 'review_exclusion_note.dart';
+import 'staged_day_correction.dart';
+import 'staged_day_correction_editor.dart';
+import 'staged_day_corrections.dart';
 import 'staged_day_review_data.dart';
 import 'staged_service_review_data.dart';
 
@@ -30,6 +33,8 @@ class _StagedDayDecisionDialogState extends State<StagedDayDecisionDialog> {
   final _note = TextEditingController();
   _DayAction? _action;
   SupplierImportExclusionReason? _reason;
+  StagedDayCorrectionField? _correctionField;
+  final _correctionEditor = GlobalKey<StagedDayCorrectionEditorState>();
 
   @override
   void dispose() {
@@ -52,6 +57,10 @@ class _StagedDayDecisionDialogState extends State<StagedDayDecisionDialog> {
       : null;
 
   void _save() {
+    if (_correctionField != null) {
+      _correctionEditor.currentState?.submit();
+      return;
+    }
     if (_blocker != null || !_form.currentState!.validate()) return;
     final review = widget.review;
     final day = widget.day;
@@ -78,10 +87,11 @@ class _StagedDayDecisionDialogState extends State<StagedDayDecisionDialog> {
     final day = widget.day;
     final decision = review.decisionFor(day);
     final media = MediaQuery.of(context);
-    final canSave =
-        _action != null &&
-        _blocker == null &&
-        (_action != _DayAction.exclude || _reason != null);
+    final canSave = _correctionField != null
+        ? review.canCorrect(day)
+        : _action != null &&
+              _blocker == null &&
+              (_action != _DayAction.exclude || _reason != null);
     return Dialog(
       key: const ValueKey('day-decision-dialog'),
       insetPadding: const EdgeInsets.symmetric(
@@ -100,7 +110,9 @@ class _StagedDayDecisionDialogState extends State<StagedDayDecisionDialog> {
             Padding(
               padding: const EdgeInsets.all(AppSpacing.s20),
               child: Text(
-                'Review day',
+                _correctionField == null
+                    ? 'Review day'
+                    : 'Correct ${_correctionField!.label.toLowerCase()}',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
             ),
@@ -109,165 +121,198 @@ class _StagedDayDecisionDialogState extends State<StagedDayDecisionDialog> {
               child: SingleChildScrollView(
                 child: Padding(
                   padding: const EdgeInsets.all(AppSpacing.s20),
-                  child: Form(
-                    key: _form,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          stagedDayLabel(day),
-                          style: Theme.of(context).textTheme.titleSmall,
-                        ),
-                        const SizedBox(height: AppSpacing.s8),
-                        Text(
-                          'Source position ${day.order} · ${day.assignedServiceIds.length} source services',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        Text(
-                          '${review.effectiveServiceCount(day)} extracted services currently assigned here',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        const SizedBox(height: AppSpacing.s12),
-                        RadioGroup<_DayAction>(
-                          groupValue: _action,
-                          onChanged: (value) => setState(() => _action = value),
+                  child: _correctionField != null
+                      ? StagedDayCorrectionEditor(
+                          key: _correctionEditor,
+                          day: day,
+                          field: _correctionField!,
+                          review: review,
+                          onSubmit: (command) =>
+                              Navigator.of(context).pop(command),
+                        )
+                      : Form(
+                          key: _form,
                           child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              const RadioListTile<_DayAction>(
-                                key: ValueKey('day-action-retain'),
-                                value: _DayAction.retain,
-                                title: Text('Retain day'),
-                                contentPadding: EdgeInsets.zero,
+                              Text(
+                                stagedDayLabel(day),
+                                style: Theme.of(context).textTheme.titleSmall,
                               ),
-                              RadioListTile<_DayAction>(
-                                key: const ValueKey('day-action-order'),
-                                value: _DayAction.order,
-                                title: Text(
-                                  review.review.isRetainedDay(day)
-                                      ? 'Change consultant order'
-                                      : 'Retain with consultant order',
+                              const SizedBox(height: AppSpacing.s8),
+                              Text(
+                                'Source position ${day.order} · ${day.assignedServiceIds.length} source services',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                              Text(
+                                '${review.effectiveServiceCount(day)} extracted services currently assigned here',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                              const SizedBox(height: AppSpacing.s12),
+                              RadioGroup<_DayAction>(
+                                groupValue: _action,
+                                onChanged: (value) =>
+                                    setState(() => _action = value),
+                                child: Column(
+                                  children: [
+                                    const RadioListTile<_DayAction>(
+                                      key: ValueKey('day-action-retain'),
+                                      value: _DayAction.retain,
+                                      title: Text('Retain day'),
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                    RadioListTile<_DayAction>(
+                                      key: const ValueKey('day-action-order'),
+                                      value: _DayAction.order,
+                                      title: Text(
+                                        review.review.isRetainedDay(day)
+                                            ? 'Change consultant order'
+                                            : 'Retain with consultant order',
+                                      ),
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                    const RadioListTile<_DayAction>(
+                                      key: ValueKey('day-action-exclude'),
+                                      value: _DayAction.exclude,
+                                      title: Text('Exclude from import'),
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                    if (decision != null)
+                                      const RadioListTile<_DayAction>(
+                                        key: ValueKey('day-action-revert'),
+                                        value: _DayAction.revert,
+                                        title: Text('Revert decision'),
+                                        contentPadding: EdgeInsets.zero,
+                                      ),
+                                  ],
                                 ),
-                                contentPadding: EdgeInsets.zero,
                               ),
-                              const RadioListTile<_DayAction>(
-                                key: ValueKey('day-action-exclude'),
-                                value: _DayAction.exclude,
-                                title: Text('Exclude from import'),
-                                contentPadding: EdgeInsets.zero,
-                              ),
-                              if (decision != null)
-                                const RadioListTile<_DayAction>(
-                                  key: ValueKey('day-action-revert'),
-                                  value: _DayAction.revert,
-                                  title: Text('Revert decision'),
-                                  contentPadding: EdgeInsets.zero,
+                              if (_action == _DayAction.order) ...[
+                                const SizedBox(height: AppSpacing.s16),
+                                const Text(
+                                  'Choose an unused positive order number. Only this day changes; other days keep their order. The source itinerary stays in supplier order.',
+                                ),
+                                const SizedBox(height: AppSpacing.s16),
+                                TextFormField(
+                                  key: const ValueKey('day-consultant-order'),
+                                  controller: _order,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Consultant order',
+                                    errorMaxLines: 3,
+                                  ),
+                                  validator: (_) =>
+                                      review.orderError(day, _parsedOrder),
+                                ),
+                                const SizedBox(height: AppSpacing.s16),
+                                Text(
+                                  'Current retained days',
+                                  style: Theme.of(context).textTheme.titleSmall,
+                                ),
+                                for (final retained
+                                    in review.retainedDaysByOrder)
+                                  Padding(
+                                    padding: const EdgeInsets.only(
+                                      top: AppSpacing.s8,
+                                    ),
+                                    child: Text(
+                                      '${review.effectiveOrder(retained)} · ${stagedDayLabel(retained)}',
+                                    ),
+                                  ),
+                              ],
+                              if (_action == _DayAction.exclude &&
+                                  _blocker == null) ...[
+                                const SizedBox(height: AppSpacing.s16),
+                                Text(
+                                  'Exclusion reason',
+                                  style: Theme.of(context).textTheme.titleSmall,
+                                ),
+                                RadioGroup<SupplierImportExclusionReason>(
+                                  groupValue: _reason,
+                                  onChanged: (value) =>
+                                      setState(() => _reason = value),
+                                  child: Column(
+                                    children: [
+                                      for (final reason
+                                          in SupplierImportExclusionReason
+                                              .values)
+                                        RadioListTile<
+                                          SupplierImportExclusionReason
+                                        >(
+                                          key: ValueKey(
+                                            'day-reason-${reason.value}',
+                                          ),
+                                          value: reason,
+                                          title: Text(
+                                            exclusionReasonLabel(reason),
+                                          ),
+                                          contentPadding: EdgeInsets.zero,
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: AppSpacing.s12),
+                                TextFormField(
+                                  key: const ValueKey('day-exclusion-note'),
+                                  controller: _note,
+                                  minLines: 2,
+                                  maxLines: 4,
+                                  decoration: InputDecoration(
+                                    labelText:
+                                        _reason ==
+                                            SupplierImportExclusionReason.other
+                                        ? 'Exclusion note (required)'
+                                        : 'Exclusion note (optional)',
+                                    helperText:
+                                        'Explain the exclusion only. Do not include commercial details.',
+                                    helperMaxLines: 3,
+                                  ),
+                                  validator: (_) => validateReviewExclusionNote(
+                                    _note.text.trim().replaceAll(
+                                      RegExp(r'\s+'),
+                                      ' ',
+                                    ),
+                                    _reason,
+                                    subject: 'day',
+                                  ),
+                                ),
+                              ],
+                              if (_blocker case final message?) ...[
+                                const SizedBox(height: AppSpacing.s16),
+                                Semantics(
+                                  liveRegion: true,
+                                  child: Text(
+                                    message,
+                                    key: const ValueKey('day-decision-blocker'),
+                                  ),
+                                ),
+                              ],
+                              if (_action == _DayAction.revert) ...[
+                                const SizedBox(height: AppSpacing.s16),
+                                const Text(
+                                  'Remove the current day decision, including any recorded field corrections, and restore the source order proposal. Supplier content, services and review history stay unchanged.',
+                                ),
+                              ] else if (decision != null &&
+                                  decision.overrides.toMap().isNotEmpty) ...[
+                                const SizedBox(height: AppSpacing.s16),
+                                const Text(
+                                  'Existing field corrections will be kept.',
+                                ),
+                              ],
+                              if (_action == null)
+                                StagedDayCorrections(
+                                  day: day,
+                                  review: review,
+                                  onCorrect: review.canCorrect(day)
+                                      ? (field) => setState(() {
+                                          _action = null;
+                                          _correctionField = field;
+                                        })
+                                      : null,
                                 ),
                             ],
                           ),
                         ),
-                        if (_action == _DayAction.order) ...[
-                          const SizedBox(height: AppSpacing.s16),
-                          const Text(
-                            'Choose an unused positive order number. Only this day changes; other days keep their order. The source itinerary stays in supplier order.',
-                          ),
-                          const SizedBox(height: AppSpacing.s16),
-                          TextFormField(
-                            key: const ValueKey('day-consultant-order'),
-                            controller: _order,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Consultant order',
-                              errorMaxLines: 3,
-                            ),
-                            validator: (_) =>
-                                review.orderError(day, _parsedOrder),
-                          ),
-                          const SizedBox(height: AppSpacing.s16),
-                          Text(
-                            'Current retained days',
-                            style: Theme.of(context).textTheme.titleSmall,
-                          ),
-                          for (final retained in review.retainedDaysByOrder)
-                            Padding(
-                              padding: const EdgeInsets.only(
-                                top: AppSpacing.s8,
-                              ),
-                              child: Text(
-                                '${review.effectiveOrder(retained)} · ${stagedDayLabel(retained)}',
-                              ),
-                            ),
-                        ],
-                        if (_action == _DayAction.exclude &&
-                            _blocker == null) ...[
-                          const SizedBox(height: AppSpacing.s16),
-                          Text(
-                            'Exclusion reason',
-                            style: Theme.of(context).textTheme.titleSmall,
-                          ),
-                          RadioGroup<SupplierImportExclusionReason>(
-                            groupValue: _reason,
-                            onChanged: (value) =>
-                                setState(() => _reason = value),
-                            child: Column(
-                              children: [
-                                for (final reason
-                                    in SupplierImportExclusionReason.values)
-                                  RadioListTile<SupplierImportExclusionReason>(
-                                    key: ValueKey('day-reason-${reason.value}'),
-                                    value: reason,
-                                    title: Text(exclusionReasonLabel(reason)),
-                                    contentPadding: EdgeInsets.zero,
-                                  ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: AppSpacing.s12),
-                          TextFormField(
-                            key: const ValueKey('day-exclusion-note'),
-                            controller: _note,
-                            minLines: 2,
-                            maxLines: 4,
-                            decoration: InputDecoration(
-                              labelText:
-                                  _reason == SupplierImportExclusionReason.other
-                                  ? 'Exclusion note (required)'
-                                  : 'Exclusion note (optional)',
-                              helperText:
-                                  'Explain the exclusion only. Do not include commercial details.',
-                              helperMaxLines: 3,
-                            ),
-                            validator: (_) => validateReviewExclusionNote(
-                              _note.text.trim().replaceAll(RegExp(r'\s+'), ' '),
-                              _reason,
-                              subject: 'day',
-                            ),
-                          ),
-                        ],
-                        if (_blocker case final message?) ...[
-                          const SizedBox(height: AppSpacing.s16),
-                          Semantics(
-                            liveRegion: true,
-                            child: Text(
-                              message,
-                              key: const ValueKey('day-decision-blocker'),
-                            ),
-                          ),
-                        ],
-                        if (_action == _DayAction.revert) ...[
-                          const SizedBox(height: AppSpacing.s16),
-                          const Text(
-                            'Remove the current day decision, including any recorded field corrections, and restore the source order proposal. Supplier content, services and review history stay unchanged.',
-                          ),
-                        ] else if (decision != null &&
-                            decision.overrides.toMap().isNotEmpty) ...[
-                          const SizedBox(height: AppSpacing.s16),
-                          const Text(
-                            'Existing field corrections will be kept.',
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
                 ),
               ),
             ),
@@ -280,14 +325,22 @@ class _StagedDayDecisionDialogState extends State<StagedDayDecisionDialog> {
                 overflowSpacing: AppSpacing.s8,
                 children: [
                   TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Cancel'),
+                    onPressed: () {
+                      if (_correctionField != null) {
+                        setState(() => _correctionField = null);
+                      } else {
+                        Navigator.of(context).pop();
+                      }
+                    },
+                    child: Text(_correctionField == null ? 'Cancel' : 'Back'),
                   ),
                   FilledButton(
                     key: const ValueKey('save-day-decision'),
                     onPressed: canSave ? _save : null,
                     child: Text(
-                      _action == _DayAction.revert
+                      _correctionField != null
+                          ? 'Save correction'
+                          : _action == _DayAction.revert
                           ? 'Revert decision'
                           : 'Save decision',
                     ),

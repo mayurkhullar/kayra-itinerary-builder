@@ -951,7 +951,7 @@ void main() {
   );
 
   testWidgets(
-    'no field corrections, manual content, other fact decisions, or finalization are exposed',
+    'day fields use focused correction actions without inline forms or unrelated controls',
     (tester) async {
       await show(tester);
       expect(find.byType(TextFormField), findsNothing);
@@ -971,6 +971,9 @@ void main() {
       }
       await open(tester);
       expect(find.byType(TextFormField), findsNothing);
+      for (final field in ['title', 'date', 'summary', 'notes']) {
+        expect(key('correct-day-$field'), findsOneWidget);
+      }
       await tap(tester, 'day-action-order');
       expect(find.byType(TextFormField), findsOneWidget);
       expect(key('day-consultant-order'), findsOneWidget);

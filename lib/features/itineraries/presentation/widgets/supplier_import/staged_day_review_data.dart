@@ -4,6 +4,7 @@ import '../../../domain/supplier_import_resolution_decision.dart';
 import '../../../domain/supplier_import_resolution_manual_item.dart';
 import '../../../domain/supplier_import_resolution_mutation.dart';
 import '../../../domain/supplier_import_resolution_overrides.dart';
+import 'staged_day_correction.dart';
 import 'staged_service_review_data.dart';
 
 /// Day-specific display and UX preflight, not a finalization/readiness engine.
@@ -15,6 +16,41 @@ final class StagedDayReviewData {
       review.dayDecisionFor(day.id);
   int effectiveOrder(SupplierExtractionStagedDay day) =>
       decisionFor(day)?.canonicalOrder ?? day.order;
+
+  bool canCorrect(SupplierExtractionStagedDay day) =>
+      review.canReview && review.isRetainedDay(day);
+
+  SupplierImportDayDecision correctField(
+    SupplierExtractionStagedDay day,
+    StagedDayCorrectionField field,
+    SupplierImportFieldOverride<String>? value,
+  ) {
+    if (!canCorrect(day)) throw StateError('Day corrections are unavailable.');
+    final current = decisionFor(day);
+    final old = current?.overrides ?? const SupplierImportDayOverrides();
+    // A set-decision replaces the whole document. Change exactly one member,
+    // including removing that member for reset, and preserve all other state.
+    // Even after the last field reset, explicit retain remains meaningful.
+    // Removing the whole decision belongs only to the separate Revert action.
+    return SupplierImportDayDecision(
+      targetEntityId: day.id,
+      disposition:
+          current?.disposition ?? SupplierImportRetainDisposition.retain,
+      canonicalOrder: current?.canonicalOrder,
+      exclusionReason: current?.exclusionReason,
+      exclusionNote: current?.exclusionNote,
+      overrides: SupplierImportDayOverrides(
+        title: field == StagedDayCorrectionField.title
+            ? value as SupplierImportSetOverride<String>?
+            : old.title,
+        date: field == StagedDayCorrectionField.date ? value : old.date,
+        summary: field == StagedDayCorrectionField.summary
+            ? value
+            : old.summary,
+        notes: field == StagedDayCorrectionField.notes ? value : old.notes,
+      ),
+    );
+  }
 
   String? decisionLabel(SupplierExtractionStagedDay day) {
     final decision = decisionFor(day);
@@ -137,7 +173,7 @@ final class StagedDayReviewData {
     targetEntityId: day.id,
     disposition: disposition,
     canonicalOrder: order,
-    // Preserve corrections made elsewhere; this slice cannot edit them.
+    // Structural actions preserve separately recorded field corrections.
     overrides:
         decisionFor(day)?.overrides ?? const SupplierImportDayOverrides(),
     exclusionReason: reason,
