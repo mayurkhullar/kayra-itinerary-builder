@@ -7,8 +7,15 @@ import 'review_components.dart';
 import 'snapshot_itinerary.dart';
 
 class SnapshotPackageFacts extends StatelessWidget {
-  const SnapshotPackageFacts({super.key, required this.snapshot});
+  const SnapshotPackageFacts({
+    super.key,
+    required this.snapshot,
+    this.ancillaryReviewBuilder,
+    this.packageReviewBuilder,
+  });
   final SupplierExtractionSnapshot snapshot;
+  final Widget Function(SupplierExtractionFact)? ancillaryReviewBuilder;
+  final Widget Function(SupplierExtractionFact)? packageReviewBuilder;
   @override
   Widget build(BuildContext context) {
     final hotels = snapshot.facts
@@ -66,6 +73,8 @@ class SnapshotPackageFacts extends StatelessWidget {
                           },
                         ),
                         ReviewSources(hotel.sources),
+                        if (packageReviewBuilder != null)
+                          packageReviewBuilder!(hotel),
                       ],
                     ),
                   ),
@@ -78,12 +87,14 @@ class SnapshotPackageFacts extends StatelessWidget {
             'Package inclusions',
             'review-package-inclusions',
             inclusions,
+            packageReviewBuilder,
           ),
         if (exclusions.isNotEmpty)
           _PackageStatements(
             'Package exclusions',
             'review-package-exclusions',
             exclusions,
+            packageReviewBuilder,
           ),
         if (conditions.isNotEmpty)
           ReviewSection(
@@ -106,6 +117,8 @@ class SnapshotPackageFacts extends StatelessWidget {
                           ('Applies to', reviewAppliesTo(condition.appliesTo)),
                         ]),
                         ReviewSources(condition.sources),
+                        if (packageReviewBuilder != null)
+                          packageReviewBuilder!(condition),
                       ],
                     ),
                   ),
@@ -158,6 +171,8 @@ class SnapshotPackageFacts extends StatelessWidget {
                           ),
                         ],
                         ReviewSources(flight.sources),
+                        if (ancillaryReviewBuilder != null)
+                          ancillaryReviewBuilder!(flight),
                       ],
                     ),
                   ),
@@ -183,6 +198,8 @@ class SnapshotPackageFacts extends StatelessWidget {
                         ),
                         ReviewText(visa.text),
                         ReviewSources(visa.sources),
+                        if (ancillaryReviewBuilder != null)
+                          ancillaryReviewBuilder!(visa),
                       ],
                     ),
                   ),
@@ -208,7 +225,13 @@ class SnapshotPackageFacts extends StatelessWidget {
 }
 
 class _PackageStatements extends StatelessWidget {
-  const _PackageStatements(this.title, this.sectionKey, this.statements);
+  const _PackageStatements(
+    this.title,
+    this.sectionKey,
+    this.statements,
+    this.reviewBuilder,
+  );
+  final Widget Function(SupplierExtractionFact)? reviewBuilder;
   final String title;
   final String sectionKey;
   final List<SupplierExtractionPackageStatementFact> statements;
@@ -232,6 +255,7 @@ class _PackageStatements extends StatelessWidget {
                   ('Applies to', reviewAppliesTo(statement.appliesTo)),
                 ]),
                 ReviewSources(statement.sources),
+                if (reviewBuilder != null) reviewBuilder!(statement),
               ],
             ),
           ),

@@ -10,6 +10,9 @@ import '../controllers/supplier_import_review_controller.dart';
 import '../controllers/supplier_import_review_dependencies.dart';
 import '../controllers/supplier_import_review_state.dart';
 import '../widgets/supplier_import/review_components.dart';
+import '../widgets/supplier_import/ancillary_decision_panel.dart';
+import '../widgets/supplier_import/package_exception_panel.dart';
+import '../widgets/supplier_import/package_review_data.dart';
 import '../widgets/supplier_import/review_finalization_action.dart';
 import '../widgets/supplier_import/review_session_panel.dart';
 import '../widgets/supplier_import/review_summary.dart';
@@ -88,6 +91,19 @@ class _SupplierImportReviewPageState extends State<SupplierImportReviewPage> {
       default:
         return;
     }
+    if (!mounted || controller != _controller) return;
+    if (controller.state is SupplierImportReviewConflict ||
+        controller.state is SupplierImportReviewFailed) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final notice = _noticeKey.currentContext;
+        if (mounted && notice != null) Scrollable.ensureVisible(notice);
+      });
+    }
+  }
+
+  Future<void> _applyInlineDecision(Future<Object?> Function() apply) async {
+    final controller = _controller;
+    await apply();
     if (!mounted || controller != _controller) return;
     if (controller.state is SupplierImportReviewConflict ||
         controller.state is SupplierImportReviewFailed) {
@@ -263,7 +279,31 @@ class _SupplierImportReviewPageState extends State<SupplierImportReviewPage> {
                                 onReview: () => _reviewService(service),
                               ),
                         ),
-                        SnapshotPackageFacts(snapshot: loaded.snapshot),
+                        SnapshotPackageFacts(
+                          snapshot: loaded.snapshot,
+                          packageReviewBuilder: (fact) => PackageExceptionPanel(
+                            key: ValueKey('package-decision-${fact.id}'),
+                            data: PackageReviewData(serviceReview!, fact),
+                            onSet: (decision) => _applyInlineDecision(
+                              () => _controller.setDecision(decision),
+                            ),
+                            onRemove: (id) => _applyInlineDecision(
+                              () => _controller.removeDecision(id),
+                            ),
+                          ),
+                          ancillaryReviewBuilder: (fact) =>
+                              AncillaryDecisionPanel(
+                                key: ValueKey('ancillary-decision-${fact.id}'),
+                                fact: fact,
+                                review: serviceReview!,
+                                onSet: (decision) => _applyInlineDecision(
+                                  () => _controller.setDecision(decision),
+                                ),
+                                onRemove: (id) => _applyInlineDecision(
+                                  () => _controller.removeDecision(id),
+                                ),
+                              ),
+                        ),
                         ReviewHistory(loaded: loaded),
                       ],
                     );

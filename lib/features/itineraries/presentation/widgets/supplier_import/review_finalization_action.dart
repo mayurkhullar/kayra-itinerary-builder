@@ -121,7 +121,33 @@ class ReviewFinalizationAction extends StatelessWidget {
                                 bottom: AppSpacing.s8,
                               ),
                               child: Text(
-                                finalizationFindingLabel(finding.code.value),
+                                finding.targetKind ==
+                                        SupplierImportFinalizationTargetKind
+                                            .packageFact
+                                    ? packageFindingLabel(
+                                        finding.code.value,
+                                        loaded.snapshot.facts
+                                            .where(
+                                              (fact) =>
+                                                  fact.id == finding.targetId,
+                                            )
+                                            .firstOrNull,
+                                      )
+                                    : finding.code ==
+                                              SupplierImportFinalizationBlockerCode
+                                                  .unresolvedAncillaryFact &&
+                                          loaded.snapshot.facts.any(
+                                            (fact) =>
+                                                fact.id == finding.targetId,
+                                          )
+                                    ? ancillaryFindingLabel(
+                                        loaded.snapshot.facts.firstWhere(
+                                          (fact) => fact.id == finding.targetId,
+                                        ),
+                                      )
+                                    : finalizationFindingLabel(
+                                        finding.code.value,
+                                      ),
                               ),
                             ),
                           if (findings.warnings.isNotEmpty) ...[

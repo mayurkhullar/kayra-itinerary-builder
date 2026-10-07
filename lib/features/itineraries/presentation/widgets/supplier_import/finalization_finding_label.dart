@@ -1,3 +1,5 @@
+import '../../../domain/supplier_extraction_fact.dart';
+
 /// Labels only: never evaluates readiness or exposes backend/source text.
 String finalizationFindingLabel(String code) => switch (code) {
   'resolution_already_finalized' => 'This itinerary is already finalized.',
@@ -34,3 +36,38 @@ String finalizationFindingLabel(String code) => switch (code) {
   'review_issue_overridden' => 'A review issue has an override.',
   _ => 'This item needs review before finalizing.',
 };
+
+/// Match a blocker to existing trusted display facts, never to an invented ID.
+String ancillaryFindingLabel(SupplierExtractionFact fact) => switch (fact) {
+  SupplierExtractionFlightFact() =>
+    'Flight needs a decision: ${[fact.airline, fact.flightNumber, fact.origin, fact.destination].whereType<String>().join(' · ')}',
+  SupplierExtractionVisaFact() =>
+    'Visa needs a decision: ${fact.text ?? 'Visa item'}',
+  _ => 'This item needs review before finalizing.',
+};
+
+String packageFindingLabel(String code, SupplierExtractionFact? fact) {
+  const codes = {
+    'unresolved_package_accommodation',
+    'incomplete_package_accommodation',
+    'unsupported_package_accommodation_content',
+    'package_level_destination_unavailable',
+    'unresolved_package_fact',
+    'unsupported_package_mapping',
+    'canonical_validation_failed',
+    'structural_review_issue_unresolved',
+    'unresolved_review_issue',
+  };
+  if (!codes.contains(code)) {
+    return 'This package item needs review before finalizing.';
+  }
+  return switch (fact) {
+    SupplierExtractionPackageAccommodationFact() =>
+      'Hotel information needs a choice: ${fact.details.hotelName ?? 'Package accommodation'}',
+    SupplierExtractionPackageStatementFact() =>
+      '${fact.factKind == SupplierExtractionFactKind.packageInclusion ? 'Package inclusion' : 'Package exclusion'} needs review: ${fact.text}',
+    SupplierExtractionPackageConditionFact() =>
+      'Package condition needs review: ${fact.value}',
+    _ => 'This package item needs review before finalizing.',
+  };
+}

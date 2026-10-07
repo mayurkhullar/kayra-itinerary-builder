@@ -5,9 +5,19 @@ persistent, one-click `Finalize itinerary` action through the existing controlle
 The flow is exception-driven: server blockers are shown only after an explicit
 attempt, optional warnings require no acknowledgement, and there is no separate
 readiness call. Ambiguous retries reuse the pending command; validated finalized
-content is read-only. Missing package/ancillary exception resolution controls and
-canonical editor/navigation remain separate future work. Production extraction
-requests remain V2.4; this UI change does not deploy or change routing.
+content is read-only. Flight/visa blockers can be resolved with explicit
+handled-separately or exclude choices through existing Resolution mutations. Exclusion collects the required
+reason; existing decisions can be replaced or reverted while active. Workflow
+routing requires a real destination and is not offered by these controls.
+Ancillary facts never enter canonical timeline/package content. Safe untouched
+package accommodation, inclusions, exclusions and conditions remain automatic.
+Package exception controls now render current backend findings and explicit
+persisted decisions, with supported retain/map/exclude and change/revert commands
+through the existing Resolution mutation workflow. No local readiness policy or
+extra preflight exists. Mapping compatibility/losslessness and any separate
+structural review-issue requirements remain backend-authoritative. Canonical
+editor/navigation remains future work. Production extraction requests remain
+V2.4-only; these UI changes do not deploy or change routing.
 
 **Architecture decision, 2026-10-06:** section 25 resolves the canonical package
 destination and future exception-driven finalization policy. It supersedes the
