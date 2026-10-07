@@ -302,6 +302,51 @@ parser; keep the writer gated until compatible clients are available. Do not
 make old clients silently discard new fields on save. No destructive migration
 of old drafts or quotations is part of this rollout.
 
+### Optional V2 service fidelity fields
+
+Canonical timeline services now support optional `conditions`, an ordered array
+of closed `{kind, value}` objects. `kind` uses the staged condition vocabulary;
+`value` is nonempty non-commercial text. These are first-class service facts,
+not notes, day notes, package conditions, inclusions or exclusions. Source order
+and repeated conditions are preserved. Trusted safe source conditions auto-carry
+without an approval or acknowledgement. Nested evidence IDs and exact locators
+remain in the immutable Snapshot; the existing service accounting retains the
+union of trusted contributing locators and the service-to-output identity.
+There is no new provenance format or private receipt data in the Flutter reader.
+
+Timeline `hotelDetails` additionally accepts optional `city` (text/null),
+`orSimilar` (boolean/null), and `nightCount` (positive safe integer/null). They
+carry only explicit source values or deliberate corrections. False is distinct
+from unknown. City is never inferred from a Trip, day, service city or hotel
+name; nights and dates are never calculated from each other. An `orSimilar`
+qualifier does not force hotel selection. Timeline hotels are not duplicated into
+package accommodation. Package mapping policy is unchanged by this extension.
+
+All new fields are optional, strictly validated and retained by deterministic
+serialization and stored readers. Absent historical keys stay absent; an explicit
+clear remains null/empty. The `itinerary_draft_v2` discriminator and V1
+reader/writer remain unchanged, with no migration. Flutter uses separate immutable
+V2 timeline types to avoid broadening the legacy V1 contract.
+
+Service conditions support the existing sparse set/clear/reset correction flow:
+set supplies an ordered replacement `{kind, value}` list, clear supplies `[]`,
+and removal of the override restores source facts. Hotel city/orSimilar/nights
+reuse the existing sparse hotel overrides. Existing service receipt field
+operations record `conditions` and `hotel.*` corrections without copying prose.
+The shared backend commercial-value boundary applies at normalization, stored
+Snapshot reads, Resolution validation and canonical validation; conditions are
+not a pricing bypass. No itinerary pricing is generated or auto-adjusted.
+
+Flutter typed editors follow the effective corrected service type, including
+`other` to hotel/transfer/activity after authoritative reload. Missing compatible
+source details start empty, without defaults or copied incompatible values.
+Existing compatibility checks reject a type reset while incompatible typed
+overrides remain; explicitly remove those overrides before resetting the type.
+Conditions remain visible in service context and editable in the existing Edit
+flow, with no additional approval, readiness call or auto-finalization.
+Production extraction remains **V2.4-only**. This does not establish V3 production
+readiness or implement the remaining cutover tasks.
+
 ### Package content schema
 
 The following is a schema description, not production code. All listed object

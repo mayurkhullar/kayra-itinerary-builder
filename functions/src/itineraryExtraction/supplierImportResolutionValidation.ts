@@ -335,7 +335,7 @@ function parseServiceDecision(input: unknown): StagedServiceDecision {
 function parseServiceOverrides(input: unknown): ServiceOverrides {
   const fields = [
     "serviceType", "title", "description", "startTime", "endTime", "location",
-    "city", "inclusions", "exclusions", "notes", "hotel", "transfer", "activity",
+    "city", "inclusions", "exclusions", "conditions", "notes", "hotel", "transfer", "activity",
   ];
   const data = strictRecord(input, fields, [], "service overrides");
   return compact({
@@ -351,6 +351,7 @@ function parseServiceOverrides(input: unknown): ServiceOverrides {
     city: optionalOverride(data.city, text, "Service city"),
     inclusions: optionalOverride(data.inclusions, textArray, "Service inclusions"),
     exclusions: optionalOverride(data.exclusions, textArray, "Service exclusions"),
+    conditions: optionalOverride(data.conditions, conditionArray, "Service conditions"),
     notes: optionalOverride(data.notes, text, "Service notes"),
     hotel: data.hotel === undefined ? undefined : parseHotelOverrides(data.hotel),
     transfer: data.transfer === undefined ? undefined :

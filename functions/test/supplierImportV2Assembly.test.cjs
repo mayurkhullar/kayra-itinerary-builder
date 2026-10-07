@@ -410,8 +410,8 @@ test('finalized Resolution remains terminal and cannot yield a new candidate', (
   const source = snapshot();
   blocked(assemble(source, {root: root(source, {status: 'finalized', revision: 2, finalizedByUid: 'agent-1', finalizedAt: context().createdAt, resultingDraftId: 'old-draft'})}), 'resolution_already_finalized');
 });
-test('unsupported timeline conditions and structured statements remain blockers', () => {
-  for (const extra of [{conditions: [{kind: 'availability', value: 'Subject to availability'}]}, {inclusions: [{category: 'water', text: 'Water', quantity: 2}]}]) {
+test('unsupported structured service statements remain blockers', () => {
+  for (const extra of [{inclusions: [{category: 'water', text: 'Water', quantity: 2}]}]) {
     const source = snapshot({days: [day({services: [service(extra)]})]});
     blocked(assemble(source), 'unsupported_service_content');
   }

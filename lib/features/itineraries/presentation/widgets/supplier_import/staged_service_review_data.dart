@@ -101,7 +101,6 @@ final class StagedServiceReviewData {
     StagedServiceCorrectionField field,
   ) =>
       canCorrect(service) &&
-      field.supportsSource(service) &&
       (field.branch == null ||
           field.branch ==
               (decisionFor(service.id)?.overrides.serviceType?.value ??

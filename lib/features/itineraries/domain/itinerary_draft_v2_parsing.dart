@@ -6,6 +6,16 @@ abstract final class _V2 {
       throw const FormatException('Invalid canonical itinerary V2 data.');
   static Map<String, Object?> record(Object? v, Set<String> keys) =>
       SupplierExtractionParsing.exactRecord(v, keys, 'Canonical itinerary V2');
+  static Map<String, Object?> optionalRecord(
+    Object? v,
+    Set<String> required,
+    Set<String> optional,
+  ) => record(v, {...required, if (v is Map) ...optional.where(v.containsKey)});
+  static bool? nullableBoolean(Object? value) {
+    if (value != null && value is! bool) invalid();
+    return value as bool?;
+  }
+
   static List<T> list<T>(Object? v, T Function(Object?) parse) =>
       List<T>.unmodifiable(
         SupplierExtractionParsing.list(v, 'Canonical itinerary V2').map(parse),
@@ -35,10 +45,10 @@ abstract final class _V2 {
   }
 
   static final _valuePattern = RegExp(
-    r'(?:[$€£₹]\s*\d)|(?:\d[\d,.]*\s*(?:[$€£₹]|(?:INR|USD|EUR|GBP|AED|AUD|CAD|CHF|JPY|SGD|THB)\b))|'
-    r'(?:\b(?:INR|USD|EUR|GBP|AED|AUD|CAD|CHF|JPY|SGD|THB)\s*\d)|'
-    r'(?:\b(?:price|pricing|cost|total|amount|rate|supplement|margin|payment)\b[^.!?\n]{0,32}\d)|'
-    r'(?:\d[^.!?\n]{0,32}\b(?:price|pricing|cost|total|amount|rate|supplement|margin|payment)\b)',
+    r'(?:[$€£₹]\s*\d)|(?:\d[\d,.]*\s*(?:[$€£₹]|(?:INR|USD|EUR|GBP|AED|AUD|CAD|CHF|JPY|SGD|THB|CNY)\b))|'
+    r'(?:\b(?:INR|USD|EUR|GBP|AED|AUD|CAD|CHF|JPY|SGD|THB|CNY)\s*\d)|'
+    r'(?:\b(?:price|pricing|cost|total|amount|rate|supplement|commission|markup|margin|discount|payment)\b[^.!?\n]{0,32}\d)|'
+    r'(?:\d[^.!?\n]{0,32}\b(?:price|pricing|cost|total|amount|rate|supplement|commission|markup|margin|discount|payment)\b)',
     caseSensitive: false,
   );
   static final _termPattern = RegExp(

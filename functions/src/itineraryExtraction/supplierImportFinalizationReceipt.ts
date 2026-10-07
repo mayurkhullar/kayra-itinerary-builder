@@ -29,7 +29,7 @@ export type ReceiptOutputTarget = Readonly<
 export const receiptOperationFields = immutable({
   title: ["title"],
   day: ["date", "title", "summary", "notes", "canonicalOrder"],
-  service: ["serviceType", "title", "description", "startTime", "endTime", "location", "city", "inclusions", "exclusions", "notes", "day", "canonicalOrder",
+  service: ["serviceType", "title", "description", "startTime", "endTime", "location", "city", "inclusions", "exclusions", "conditions", "notes", "day", "canonicalOrder",
     "hotel.hotelName", "hotel.city", "hotel.orSimilar", "hotel.checkInDate", "hotel.checkOutDate", "hotel.nightCount", "hotel.roomType", "hotel.mealPlan", "hotel.numberOfRooms", "hotel.supplierStarRating",
     "transfer.pickup", "transfer.dropoff", "transfer.vehicleType", "transfer.transferType", "activity.activityName", "activity.duration", "activity.activityType"],
   package_accommodation: ["hotelName", "city", "orSimilar", "checkInDate", "checkOutDate", "nightCount", "roomType", "mealPlan", "numberOfRooms", "supplierStarRating", "day", "canonicalOrder"],

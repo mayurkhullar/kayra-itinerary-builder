@@ -179,6 +179,7 @@ void main() {
         'city',
         'inclusions',
         'exclusions',
+        'conditions',
         'notes',
       ],
     );

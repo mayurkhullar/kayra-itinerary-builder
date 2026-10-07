@@ -1,6 +1,6 @@
+import type {ItineraryDraftV2Day, ItineraryDraftV2Service, ItineraryDraftV2HotelDetails} from "./itineraryDraftV2";
 import type {
-  ValidatedActivityDetails, ValidatedHotelDetails, ValidatedItineraryDay,
-  ValidatedItineraryService, ValidatedReviewIssue, ValidatedSourceReference,
+  ValidatedActivityDetails, ValidatedReviewIssue, ValidatedSourceReference,
   ValidatedTransferDetails,
 } from "./draftValidation";
 import {
@@ -12,7 +12,7 @@ import {
 // validates canonical maps and internal linkage; it cannot authenticate sources.
 export function parseTimeline(
   input: unknown, packageIds: readonly string[],
-): readonly ValidatedItineraryDay[] {
+): readonly ItineraryDraftV2Day[] {
   let previous = 0;
   return array(input, "Days").map((value) => {
     const data = exact(value, ["dayNumber", "date", "title", "summary", "services", "notes"], "Day");
@@ -30,11 +30,11 @@ export function parseTimeline(
   });
 }
 
-function service(input: unknown, packageIds: readonly string[]): ValidatedItineraryService {
-  const data = exact(input, [
+function service(input: unknown, packageIds: readonly string[]): ItineraryDraftV2Service {
+  const data = exactOptional(input, [
     "id", "type", "title", "description", "startTime", "endTime", "location", "city",
     "inclusions", "exclusions", "notes", "hotelDetails", "transferDetails", "activityDetails", "sourceReference",
-  ], "Service");
+  ], ["conditions"], "Service");
   const type = enumValue(data.type, serviceTypes, "Service type");
   const hotelDetails = data.hotelDetails === null ? null : hotel(data.hotelDetails);
   const transferDetails = data.transferDetails === null ? null : transfer(data.transferDetails);
@@ -53,21 +53,29 @@ function service(input: unknown, packageIds: readonly string[]): ValidatedItiner
     city: optionalTimelineText(data.city, "City"),
     inclusions: timelineTextList(data.inclusions, "Service inclusions"),
     exclusions: timelineTextList(data.exclusions, "Service exclusions"),
+    ...(Object.prototype.hasOwnProperty.call(data, "conditions") ? {conditions: array(data.conditions, "Service conditions").map((value) => {
+      const condition = exact(value, ["kind", "value"], "Service condition");
+      const kind = enumValue(condition.kind, ["operating_basis", "vehicle", "class", "ticket_scope", "availability", "payment_basis", "guide", "other"], "Condition kind");
+      return {kind, value: text(condition.value, "Condition value", kind === "payment_basis")};
+    })} : {}),
     notes: optionalTimelineText(data.notes, "Service notes"),
     hotelDetails, transferDetails, activityDetails,
     sourceReference: data.sourceReference === null ? null : source(data.sourceReference, packageIds),
   };
 }
 
-function hotel(input: unknown): ValidatedHotelDetails {
-  const data = exact(input, [
+function hotel(input: unknown): ItineraryDraftV2HotelDetails {
+  const data = exactOptional(input, [
     "hotelName", "checkInDate", "checkOutDate", "roomType", "mealPlan", "numberOfRooms", "supplierStarRating",
-  ], "Hotel details");
+  ], ["city", "orSimilar", "nightCount"], "Hotel details");
   const checkInDate = timelineDate(data.checkInDate, "Check-in");
   const checkOutDate = timelineDate(data.checkOutDate, "Check-out");
   dateRange(checkInDate?.toISOString() ?? null, checkOutDate?.toISOString() ?? null);
   return {
     hotelName: text(data.hotelName, "Hotel name"), checkInDate, checkOutDate,
+    ...(Object.prototype.hasOwnProperty.call(data, "city") ? {city: nullableText(data.city, "Hotel city")} : {}),
+    ...(Object.prototype.hasOwnProperty.call(data, "orSimilar") ? {orSimilar: nullableBoolean(data.orSimilar)} : {}),
+    ...(Object.prototype.hasOwnProperty.call(data, "nightCount") ? {nightCount: nullablePositiveInteger(data.nightCount, "Night count")} : {}),
     roomType: optionalTimelineText(data.roomType, "Room type"),
     mealPlan: optionalTimelineText(data.mealPlan, "Meal plan"),
     numberOfRooms: nullablePositiveInteger(data.numberOfRooms, "Room count"),
@@ -128,4 +136,12 @@ function timelineTextList(value: unknown, label: string): readonly string[] {
     if (typeof item !== "string") invalid(`${label} must contain text.`);
     return item.trim() === "" ? "" : text(item, label);
   }).filter((item) => item !== "");
+}
+
+function exactOptional(input: unknown, required: readonly string[], optional: readonly string[], label: string): Record<string, unknown> {
+  return exact(input, [...required, ...optional.filter((key) => input !== null && typeof input === "object" && Object.prototype.hasOwnProperty.call(input, key))], label);
+}
+function nullableBoolean(value: unknown): boolean | null {
+  if (value !== null && typeof value !== "boolean") invalid("Or-similar must be boolean or null.");
+  return value;
 }

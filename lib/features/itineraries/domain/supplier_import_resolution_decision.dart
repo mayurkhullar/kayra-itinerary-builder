@@ -377,6 +377,7 @@ final class SupplierImportServiceOverrides {
     this.city,
     this.inclusions,
     this.exclusions,
+    this.conditions,
     this.notes,
     this.hotel,
     this.transfer,
@@ -396,6 +397,7 @@ final class SupplierImportServiceOverrides {
         'city',
         'inclusions',
         'exclusions',
+        'conditions',
         'notes',
         'hotel',
         'transfer',
@@ -456,6 +458,11 @@ final class SupplierImportServiceOverrides {
         'exclusions',
         SupplierImportResolutionParsing.textList,
       ),
+      conditions: supplierImportOptionalOverride(
+        data,
+        'conditions',
+        _conditions,
+      ),
       notes: supplierImportOptionalOverride(
         data,
         'notes',
@@ -482,6 +489,8 @@ final class SupplierImportServiceOverrides {
   final SupplierImportFieldOverride<String>? city;
   final SupplierImportFieldOverride<List<String>>? inclusions;
   final SupplierImportFieldOverride<List<String>>? exclusions;
+  final SupplierImportFieldOverride<List<SupplierImportResolutionCondition>>?
+  conditions;
   final SupplierImportFieldOverride<String>? notes;
   final SupplierImportHotelOverrides? hotel;
   final SupplierImportTransferOverrides? transfer;
@@ -498,6 +507,7 @@ final class SupplierImportServiceOverrides {
       'city': city,
       'inclusions': inclusions,
       'exclusions': exclusions,
+      'conditions': conditions,
       'notes': notes,
     }),
     if (hotel != null) 'hotel': hotel!.toMap(),

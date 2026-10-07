@@ -14,6 +14,7 @@ enum ServiceCorrectionInput {
   serviceType,
   transferType,
   list,
+  conditions,
 }
 
 /// Closed presentation catalog of the existing staged-service override contract.
@@ -31,6 +32,11 @@ enum StagedServiceCorrectionField {
   city('city', 'City'),
   inclusions('inclusions', 'Inclusions', ServiceCorrectionInput.list),
   exclusions('exclusions', 'Exclusions', ServiceCorrectionInput.list),
+  conditions(
+    'conditions',
+    'Service conditions',
+    ServiceCorrectionInput.conditions,
+  ),
   notes('notes', 'Notes', ServiceCorrectionInput.multiline),
   hotelName('hotelName', 'Hotel name', ServiceCorrectionInput.text, 'hotel'),
   hotelCity('city', 'Hotel city', ServiceCorrectionInput.text, 'hotel'),
@@ -122,6 +128,7 @@ enum StagedServiceCorrectionField {
     city => o?.city,
     inclusions => o?.inclusions,
     exclusions => o?.exclusions,
+    conditions => o?.conditions,
     notes => o?.notes,
     hotelName => o?.hotel?.hotelName,
     hotelCity => o?.hotel?.city,
@@ -152,6 +159,7 @@ enum StagedServiceCorrectionField {
     city => s.city,
     inclusions => s.inclusions,
     exclusions => s.exclusions,
+    conditions => s.conditions,
     notes => s.notes,
     hotelName => s.hotelDetails?.hotelName,
     hotelCity => s.hotelDetails?.city,
@@ -210,6 +218,10 @@ String serviceCorrectionValueLabel(Object? value) => switch (value) {
               .map((item) => '• ${serviceCorrectionValueLabel(item)}')
               .join('\n'),
   SupplierExtractionStatement() => value.text,
+  SupplierExtractionCondition() =>
+    "${reviewLabel(value.kind.value)}: ${value.value}",
+  SupplierImportResolutionCondition() =>
+    "${reviewLabel(value.kind.value)}: ${value.value}",
   _ => value.toString(),
 };
 

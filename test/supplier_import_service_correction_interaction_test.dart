@@ -350,7 +350,7 @@ void main() {
     },
   );
   testWidgets(
-    'safe generic type override and reset use typed contract without gaining detail editors',
+    'safe generic type override exposes effective detail editors and reset hides them',
     (tester) async {
       ui.h.snapshots.value = serviceCorrectionSnapshot(
         service1: {'serviceType': 'other', 'hotelDetails': null},
@@ -367,7 +367,7 @@ void main() {
         'value': 'hotel',
       });
       await ui.tap(tester, 'service-review-action-staged-service-1');
-      expect(serviceKey('correct-service-roomType'), findsNothing);
+      expect(serviceKey('correct-service-roomType'), findsOneWidget);
       await ui.tap(tester, 'correct-service-serviceType');
       await ui.tap(tester, 'service-correction-reset');
       await ui.tap(tester, 'save-service-decision');

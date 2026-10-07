@@ -68,7 +68,14 @@ export function buildTimeline(
       id, type, ...fields(source, overrides, commonServiceFields),
       inclusions: list(source.inclusions.map((item) => item.text), overrides?.inclusions),
       exclusions: list(source.exclusions.map((item) => item.text), overrides?.exclusions),
-      hotelDetails: type === "hotel" ? fields(source.hotelDetails, overrides?.hotel, canonicalHotelFields) : null,
+      ...(source.conditions.length || overrides?.conditions ? {conditions:
+        list(source.conditions.map(({kind, value}) => ({kind, value})), overrides?.conditions)} : {}),
+      hotelDetails: type === "hotel" ? {
+        ...fields(source.hotelDetails, overrides?.hotel, canonicalHotelFields),
+        ...fields(source.hotelDetails, overrides?.hotel, ["city", "orSimilar", "nightCount"].filter((key) =>
+          (source.hotelDetails as unknown as Record<string, unknown> | null)?.[key] != null ||
+          Object.prototype.hasOwnProperty.call(overrides?.hotel ?? {}, key))),
+      } : null,
       transferDetails: type === "transfer" ? fields(source.transferDetails, overrides?.transfer, transferFields) : null,
       activityDetails: type === "activity" ? fields(source.activityDetails, overrides?.activity, activityFields) : null,
       sourceReference: timelineSource(source.sources),
@@ -108,6 +115,6 @@ export function timelineMap(timeline: AssemblyTimeline): object[] {
   }));
 }
 
-function list(source: readonly string[], override?: {operation: "set"; value: readonly string[]} | {operation: "clear"}): readonly string[] {
+function list<T>(source: readonly T[], override?: {operation: "set"; value: readonly T[]} | {operation: "clear"}): readonly T[] {
   return override === undefined ? source : override.operation === "clear" ? [] : [...override.value];
 }

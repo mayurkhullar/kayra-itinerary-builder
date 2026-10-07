@@ -10,6 +10,7 @@ import 'staged_service_correction.dart';
 import 'staged_service_correction_validation.dart';
 import 'staged_service_corrections.dart';
 import 'staged_service_list_editor.dart';
+import 'staged_service_condition_editor.dart';
 import 'staged_service_review_data.dart';
 
 enum _CorrectionAction { set, clear, reset }
@@ -35,6 +36,7 @@ class StagedServiceCorrectionEditor extends StatefulWidget {
 class StagedServiceCorrectionEditorState
     extends State<StagedServiceCorrectionEditor> {
   final _form = GlobalKey<FormState>();
+  final _conditions = GlobalKey<StagedServiceConditionEditorState>();
   final _list = GlobalKey<StagedServiceListEditorState>();
   late final TextEditingController _value;
   Object? _choice;
@@ -86,6 +88,7 @@ class StagedServiceCorrectionEditorState
         ServiceCorrectionInput.boolean ||
         ServiceCorrectionInput.serviceType ||
         ServiceCorrectionInput.transferType => _choice!,
+        ServiceCorrectionInput.conditions => _conditions.currentState!.values,
         ServiceCorrectionInput.list => _list.currentState!.values,
         _ => parseServiceCorrection(field, _value.text),
       }),
@@ -208,6 +211,22 @@ class StagedServiceCorrectionEditorState
           _error = null;
         }),
         validator: (value) => value == null ? 'Choose a value.' : null,
+      );
+    }
+    if (field.input == ServiceCorrectionInput.conditions) {
+      return StagedServiceConditionEditor(
+        key: _conditions,
+        initialValues: _currentValue is List<SupplierImportResolutionCondition>
+            ? _currentValue! as List<SupplierImportResolutionCondition>
+            : _current is SupplierImportClearOverride
+            ? const []
+            : [
+                for (final c in widget.service.conditions)
+                  SupplierImportResolutionCondition(
+                    kind: c.kind,
+                    value: c.value,
+                  ),
+              ],
       );
     }
     if (field.input == ServiceCorrectionInput.list) {

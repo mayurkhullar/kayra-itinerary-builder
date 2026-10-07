@@ -1,5 +1,5 @@
 import type {
-  ValidatedItineraryDay,
+  ValidatedItineraryDay, ValidatedItineraryService, ValidatedHotelDetails,
   ValidatedReviewIssue,
 } from "./draftValidation";
 import type {ItineraryDraftPackageContent} from "./itineraryDraftPackageContent";
@@ -14,7 +14,22 @@ export type ImmutableDraftValue<T> = T extends Date ? Date :
   T extends readonly (infer Item)[] ? readonly ImmutableDraftValue<Item>[] :
   T extends object ? {readonly [Key in keyof T]: ImmutableDraftValue<T[Key]>} : T;
 
-export type ItineraryDraftV2Day = ImmutableDraftValue<ValidatedItineraryDay>;
+export interface ItineraryDraftV2ServiceCondition {
+  kind: "operating_basis" | "vehicle" | "class" | "ticket_scope" | "availability" | "payment_basis" | "guide" | "other";
+  value: string;
+}
+export interface ItineraryDraftV2HotelDetails extends ValidatedHotelDetails {
+  city?: string | null;
+  orSimilar?: boolean | null;
+  nightCount?: number | null;
+}
+export interface ItineraryDraftV2Service extends Omit<ValidatedItineraryService, "hotelDetails"> {
+  conditions?: readonly ItineraryDraftV2ServiceCondition[];
+  hotelDetails: ItineraryDraftV2HotelDetails | null;
+}
+export type ItineraryDraftV2Day = ImmutableDraftValue<Omit<ValidatedItineraryDay, "services"> & {
+  services: readonly ItineraryDraftV2Service[];
+}>;
 
 export interface ItineraryDraftImportResult {
   readonly extractionId: string;

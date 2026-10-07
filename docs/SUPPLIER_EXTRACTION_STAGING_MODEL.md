@@ -1063,7 +1063,7 @@ provenance.
 `ServiceOverrides` has only these typed members:
 
 - common fields: `serviceType`, `title`, `description`, `startTime`, `endTime`,
-  `location`, `city`, `inclusions`, `exclusions` and `notes`;
+  `location`, `city`, `inclusions`, `exclusions`, `conditions` and `notes`;
 - hotel fields: `hotelName`, `city`, `orSimilar`, `checkInDate`,
   `checkOutDate`, `nightCount`, `roomType`, `mealPlan`, `numberOfRooms` and
   `supplierStarRating`;
@@ -1710,12 +1710,23 @@ for every input fact. Do not let the UI maintain a second acceptance checklist.
 | Oversize, unsupported relationship, commercial/ancillary contamination, destination conflict | Typed blocking findings in the future policy. No truncation, arbitrary notes or guessed destination. |
 | Explicit valid exclusion | No retained-content blocker for that fact; preserve exclusion outcome and check dependent issues/references. |
 
-The existing timeline still lacks service-level structured conditions and some
-accommodation detail fields. This package-only architecture does not declare
-those representable or weaken `unsupported_service_content`. They require a
-separate lossless timeline extension or an explicit valid consultant correction
-before affected imports can finalize. V3 production readiness must not be
-claimed just because package blockers have been resolved architecturally.
+The optional V2 timeline extension now preserves service-scoped conditions as
+ordered `{kind, value}` records and explicit hotel city/orSimilar/nightCount.
+Safe conditions auto-carry without approval, remain separate from all notes and
+package content, and support sparse ordered replacement/clear/reset through the
+existing service correction mutation. Hotel corrections reuse existing fields.
+Source condition identities/locators remain in the immutable Snapshot and existing
+service lineage; receipt field operations record corrections without source prose.
+The shared commercial boundary remains fail-closed. No pricing is generated.
+
+Flutter typed editors follow the effective corrected type, including newly typed
+hotel/transfer/activity with empty missing details. Existing compatibility checks
+prevent orphan typed corrections on a reset. No readiness call or additional
+consultant acknowledgement is added. City, nights and dates are never inferred,
+and timeline hotels are not copied to package content. Old V2 keys remain optional
+with no migration; V1 and package mapping policy remain unchanged. Other genuinely
+unsupported service content still blocks. Production remains V2.4-only; this
+extension does not declare V3 production readiness.
 
 Flights/visas remain separate ancillary facts. Do not route them into `other`,
 package notes or generic land services, including through a package statement's

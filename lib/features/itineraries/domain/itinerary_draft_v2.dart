@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import 'kayra_itinerary_day.dart';
 import 'kayra_itinerary_details.dart';
 import 'kayra_itinerary_review_issue.dart';
 import 'kayra_itinerary_service.dart';
@@ -9,6 +8,7 @@ import 'supplier_extraction_values.dart';
 
 part 'itinerary_draft_v2_parsing.dart';
 part 'itinerary_draft_v2_timeline.dart';
+part 'itinerary_draft_v2_service.dart';
 part 'itinerary_draft_v2_import_result.dart';
 part 'itinerary_draft_v2_package_content.dart';
 part 'itinerary_draft_v2_provenance.dart';
@@ -112,7 +112,7 @@ final class ItineraryDraftV2 {
 
   final String id, tripId, title, createdByUid;
   String get schemaVersion => itineraryDraftV2SchemaVersion;
-  final List<KayraItineraryDay> days;
+  final List<ItineraryDraftV2Day> days;
   final List<String> sourcePackageIds;
   final List<KayraItineraryReviewIssue> reviewIssues;
   final DateTime createdAt, updatedAt;

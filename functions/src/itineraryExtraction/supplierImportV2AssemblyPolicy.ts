@@ -186,7 +186,6 @@ function assessServiceContent(
   }
 
   if (hasIncompatibleSourceDetails(source, decision, type) ||
-      source.conditions.length > 0 ||
       hasStructuredStatements(source, decision)) {
     add(blockers, "unsupported_service_content", "service", source.id);
   }
@@ -203,13 +202,6 @@ function hasIncompatibleSourceDetails(
       !allCleared(decision?.overrides.transfer, Object.keys(source.transferDetails))) return true;
   if (source.activityDetails !== null && type !== "activity" &&
       !allCleared(decision?.overrides.activity, Object.keys(source.activityDetails))) return true;
-  if (type === "hotel") {
-    const details = source.hotelDetails;
-    const overrides = decision?.overrides.hotel;
-    if (effective(details?.city ?? null, overrides?.city) !== null ||
-        effective(details?.orSimilar ?? null, overrides?.orSimilar) !== null ||
-        effective(details?.nightCount ?? null, overrides?.nightCount) !== null) return true;
-  }
   return false;
 }
 

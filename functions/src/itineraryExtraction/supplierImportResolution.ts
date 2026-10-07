@@ -121,6 +121,7 @@ export interface ServiceOverrides {
   city?: FieldOverride<string>;
   inclusions?: FieldOverride<readonly string[]>;
   exclusions?: FieldOverride<readonly string[]>;
+  conditions?: FieldOverride<readonly ResolutionCondition[]>;
   notes?: FieldOverride<string>;
   hotel?: Readonly<HotelOverrides>;
   transfer?: Readonly<TransferOverrides>;

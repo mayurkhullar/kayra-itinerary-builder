@@ -1,6 +1,9 @@
 part of 'itinerary_draft_v2.dart';
 
-List<KayraItineraryDay> _parseV2Timeline(Object? input, List<String> packages) {
+List<ItineraryDraftV2Day> _parseV2Timeline(
+  Object? input,
+  List<String> packages,
+) {
   var previous = 0;
   return _V2.list(input, (value) {
     final m = _V2.record(value, {
@@ -14,7 +17,7 @@ List<KayraItineraryDay> _parseV2Timeline(Object? input, List<String> packages) {
     final number = _V2.positive(m['dayNumber']);
     if (number <= previous) _V2.invalid();
     previous = number;
-    return KayraItineraryDay(
+    return ItineraryDraftV2Day._(
       dayNumber: number,
       date: _V2.timelineDate(m['date']),
       title: _V2.text(m['title']),
@@ -25,32 +28,44 @@ List<KayraItineraryDay> _parseV2Timeline(Object? input, List<String> packages) {
   });
 }
 
-KayraItineraryService _parseV2Service(Object? value, List<String> packages) {
-  final m = _V2.record(value, {
-    'id',
-    'type',
-    'title',
-    'description',
-    'startTime',
-    'endTime',
-    'location',
-    'city',
-    'inclusions',
-    'exclusions',
-    'notes',
-    'hotelDetails',
-    'transferDetails',
-    'activityDetails',
-    'sourceReference',
-  });
+ItineraryDraftV2Service _parseV2Service(Object? value, List<String> packages) {
+  final m = _V2.optionalRecord(
+    value,
+    {
+      'id',
+      'type',
+      'title',
+      'description',
+      'startTime',
+      'endTime',
+      'location',
+      'city',
+      'inclusions',
+      'exclusions',
+      'notes',
+      'hotelDetails',
+      'transferDetails',
+      'activityDetails',
+      'sourceReference',
+    },
+    {'conditions'},
+  );
   List<String> texts(Object? value) => _V2
       .list(value, (v) {
         if (v is String && v.trim().isEmpty) return '';
         return _V2.text(v);
       })
       .where((v) => v.isNotEmpty)
-      .toList();
-  return KayraItineraryService(
+      .toList(growable: false);
+  final type = KayraItineraryServiceType.parse(m['type']);
+  if ((m['hotelDetails'] != null && type != KayraItineraryServiceType.hotel) ||
+      (m['transferDetails'] != null &&
+          type != KayraItineraryServiceType.transfer) ||
+      (m['activityDetails'] != null &&
+          type != KayraItineraryServiceType.activity)) {
+    _V2.invalid();
+  }
+  return ItineraryDraftV2Service._(
     id: _V2.id(m['id']),
     type: KayraItineraryServiceType.parse(m['type']),
     title: _V2.text(m['title']),
@@ -60,8 +75,26 @@ KayraItineraryService _parseV2Service(Object? value, List<String> packages) {
     location: _V2.optionalText(m['location']),
     city: _V2.optionalText(m['city']),
     notes: _V2.optionalText(m['notes']),
-    inclusions: texts(m['inclusions']),
-    exclusions: texts(m['exclusions']),
+    conditions: m.containsKey('conditions')
+        ? _V2.list(m['conditions'], (v) {
+            final c = _V2.record(v, {'kind', 'value'});
+            final kind = _V2.enumeration(
+              c['kind'],
+              SupplierExtractionConditionKind.values,
+              (k) => k.value,
+            );
+            return ItineraryDraftV2ServiceCondition._(
+              kind,
+              _V2.text(
+                c['value'],
+                directPayment:
+                    kind == SupplierExtractionConditionKind.paymentBasis,
+              ),
+            );
+          })
+        : null,
+    inclusions: List.unmodifiable(texts(m['inclusions'])),
+    exclusions: List.unmodifiable(texts(m['exclusions'])),
     hotelDetails: m['hotelDetails'] == null
         ? null
         : _parseV2Hotel(m['hotelDetails']),
@@ -77,18 +110,31 @@ KayraItineraryService _parseV2Service(Object? value, List<String> packages) {
   );
 }
 
-KayraItineraryHotelDetails _parseV2Hotel(Object? value) {
-  final m = _V2.record(value, {
-    'hotelName',
-    'checkInDate',
-    'checkOutDate',
-    'roomType',
-    'mealPlan',
-    'numberOfRooms',
-    'supplierStarRating',
-  });
-  return KayraItineraryHotelDetails(
+ItineraryDraftV2TimelineHotelDetails _parseV2Hotel(Object? value) {
+  final m = _V2.optionalRecord(
+    value,
+    {
+      'hotelName',
+      'checkInDate',
+      'checkOutDate',
+      'roomType',
+      'mealPlan',
+      'numberOfRooms',
+      'supplierStarRating',
+    },
+    {'city', 'orSimilar', 'nightCount'},
+  );
+  final start = _V2.timelineDate(m['checkInDate']);
+  final end = _V2.timelineDate(m['checkOutDate']);
+  if (start != null && end != null && !end.isAfter(start)) _V2.invalid();
+  return ItineraryDraftV2TimelineHotelDetails._(
     hotelName: _V2.text(m['hotelName']),
+    city: _V2.nullableText(m['city']),
+    orSimilar: _V2.nullableBoolean(m['orSimilar']),
+    nightCount: _V2.nullablePositive(m['nightCount']),
+    present: Set.unmodifiable(
+      m.keys.where({'city', 'orSimilar', 'nightCount'}.contains),
+    ),
     checkInDate: _V2.timelineDate(m['checkInDate']),
     checkOutDate: _V2.timelineDate(m['checkOutDate']),
     roomType: _V2.optionalText(m['roomType']),
