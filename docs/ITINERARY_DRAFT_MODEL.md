@@ -1,11 +1,20 @@
 # Structured itinerary draft model
 
+**Review UI implementation status:** Supplier Import review now exposes one
+persistent, one-click `Finalize itinerary` action through the existing controller.
+The flow is exception-driven: server blockers are shown only after an explicit
+attempt, optional warnings require no acknowledgement, and there is no separate
+readiness call. Ambiguous retries reuse the pending command; validated finalized
+content is read-only. Missing package/ancillary exception resolution controls and
+canonical editor/navigation remain separate future work. Production extraction
+requests remain V2.4; this UI change does not deploy or change routing.
+
 Sections before **Canonical v2 architecture** describe the implemented legacy
 model. The v2 pure TypeScript model/validator, deterministic Supplier Import
 assembly policy, private finalization receipt domain and internal Admin atomic
 finalization writer and authenticated finalization callable are implemented.
 The callable is not deployed. Strict read-only Flutter V2 parsing and repository
-support are implemented. Finalization/navigation UI, migration, client access/index
+support are implemented. Canonical navigation UI, migration, client access/index
 rollout and production extraction cutover remain future work.
 
 The pure entry point is `supplierImportV2Assembly.ts`. It consumes a trusted
@@ -82,8 +91,8 @@ and 4 KiB. This is **not exact Firestore protobuf/document/index size**. Firesto
 remains the final limit; size/resource rejections return a safe capacity outcome.
 No content is truncated. See staging-model section 25.7 for loading, capacity
 and rollout details. The callable described below is connected in source only;
-the separate Flutter V2 reader is implemented, with no Finalize UI or production
-routing change.
+the separate Flutter V2 reader is implemented, with the review Finalize UI
+described above and no production routing change.
 
 ### Authenticated finalization callable (not deployed)
 
@@ -110,8 +119,8 @@ Missing authentication maps to `unauthenticated`, authorization to
 `permission-denied`, malformed requests to `invalid-argument`, unavailable
 Snapshot/invalid trusted state to `failed-precondition`, and infrastructure
 failures to a sanitized `internal` error. Logs contain only function name and
-safe outcome/error code. Nothing is deployed; Flutter finalization and production
-V3 request cutover remain separate tasks. Production requests remain V2.4-only.
+safe outcome/error code. Nothing is deployed; production
+V3 request cutover remains a separate task. Production requests remain V2.4-only.
 
 `KayraItineraryDraft` is the editable, provider-neutral itinerary structure used
 after supplier material has been organized. It contains client-facing travel

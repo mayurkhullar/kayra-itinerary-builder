@@ -2,7 +2,7 @@ part of 'supplier_import_review_controller.dart';
 
 /// Transport orchestration only. No assembly/readiness policy is evaluated here.
 extension _FinalizationOrchestration on SupplierImportReviewController {
-  Future<SupplierImportReviewError?> _beginFinalization() async {
+  bool get _canBeginFinalization {
     final loaded = _state.loaded;
     if (_disposed ||
         _snapshot == null ||
@@ -14,12 +14,36 @@ extension _FinalizationOrchestration on SupplierImportReviewController {
         _pending != null ||
         _outcomeAwaitingRefresh != null ||
         _finalization?.request != null) {
-      return SupplierImportReviewController._invalidAction;
+      return false;
     }
     if (_finalization?.outcome is SupplierImportFinalizationCapacityExceeded &&
         _finalization?.attemptedRevision == loaded.resolution.root.revision) {
+      return false;
+    }
+    return true;
+  }
+
+  bool get _canRetryFinalization {
+    final current = _state;
+    final pending = _finalization;
+    if (_disposed ||
+        current is! SupplierImportReviewFailed ||
+        current.recovery !=
+            SupplierImportReviewRecovery.retryPendingFinalization ||
+        pending?.phase != SupplierImportReviewFinalizationPhase.ambiguous ||
+        pending?.request == null ||
+        current.loaded == null ||
+        _pending != null) {
+      return false;
+    }
+    return true;
+  }
+
+  Future<SupplierImportReviewError?> _beginFinalization() async {
+    if (!canFinalizeReview) {
       return SupplierImportReviewController._invalidAction;
     }
+    final loaded = _state.loaded! as SupplierImportReviewActive;
     SupplierImportFinalizationRequest request;
     try {
       request = SupplierImportFinalizationRequest(
@@ -41,18 +65,11 @@ extension _FinalizationOrchestration on SupplierImportReviewController {
   }
 
   Future<SupplierImportReviewError?> _retryFinalization() async {
-    final current = _state;
-    final pending = _finalization;
-    if (_disposed ||
-        current is! SupplierImportReviewFailed ||
-        current.recovery !=
-            SupplierImportReviewRecovery.retryPendingFinalization ||
-        pending?.phase != SupplierImportReviewFinalizationPhase.ambiguous ||
-        pending?.request == null ||
-        current.loaded == null ||
-        _pending != null) {
+    if (!canRetryPendingFinalization) {
       return SupplierImportReviewController._invalidAction;
     }
+    final current = _state;
+    final pending = _finalization;
     return _executeFinalization(pending!.request!, current.loaded!);
   }
 

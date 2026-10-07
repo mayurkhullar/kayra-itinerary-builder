@@ -10,6 +10,7 @@ import '../controllers/supplier_import_review_controller.dart';
 import '../controllers/supplier_import_review_dependencies.dart';
 import '../controllers/supplier_import_review_state.dart';
 import '../widgets/supplier_import/review_components.dart';
+import '../widgets/supplier_import/review_finalization_action.dart';
 import '../widgets/supplier_import/review_session_panel.dart';
 import '../widgets/supplier_import/review_summary.dart';
 import '../widgets/supplier_import/snapshot_itinerary.dart';
@@ -148,9 +149,10 @@ class _SupplierImportReviewPageState extends State<SupplierImportReviewPage> {
     final busy =
         state is SupplierImportReviewInitial ||
         state is SupplierImportReviewLoading ||
-        state is SupplierImportReviewSaving;
+        state is SupplierImportReviewSaving ||
+        state is SupplierImportReviewFinalizing;
     final refreshing = state is SupplierImportReviewLoading;
-    return SingleChildScrollView(
+    final content = SingleChildScrollView(
       key: const ValueKey('supplier-import-review-scroll'),
       child: KayraContentFrame(
         maxWidth: AppLayout.dashboardMaxContentWidth,
@@ -208,12 +210,13 @@ class _SupplierImportReviewPageState extends State<SupplierImportReviewPage> {
                 ],
               ),
               const SizedBox(height: AppSpacing.s24),
-              ReviewStateNotice(
-                key: _noticeKey,
-                state: state,
-                onRefresh: _controller.refresh,
-                onRetry: _controller.retryPendingMutation,
-              ),
+              if (!ReviewFinalizationAction.ownsNotice(state))
+                ReviewStateNotice(
+                  key: _noticeKey,
+                  state: state,
+                  onRefresh: _controller.refresh,
+                  onRetry: _controller.retryPendingMutation,
+                ),
               if (loaded == null && busy)
                 const _ReviewLoading()
               else if (loaded != null) ...[
@@ -290,6 +293,19 @@ class _SupplierImportReviewPageState extends State<SupplierImportReviewPage> {
           ),
         ),
       ),
+    );
+    return Column(
+      children: [
+        Expanded(child: content),
+        if (_controller.supportsFinalization)
+          ReviewFinalizationAction(
+            state: state,
+            canFinalize: _controller.canFinalizeReview,
+            canRetry: _controller.canRetryPendingFinalization,
+            onFinalize: _controller.finalizeReview,
+            onRetry: _controller.retryPendingFinalization,
+          ),
+      ],
     );
   }
 }

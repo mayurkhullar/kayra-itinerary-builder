@@ -55,6 +55,11 @@ final class SupplierImportReviewController extends ChangeNotifier {
   final ItineraryDraftV2Repository? _drafts;
   SupplierImportReviewFinalizationState? _finalization;
 
+  /// Lifecycle availability only; readiness remains server-owned.
+  bool get canFinalizeReview => _canBeginFinalization;
+  bool get canRetryPendingFinalization => _canRetryFinalization;
+  bool get supportsFinalization => _finalizations != null && _drafts != null;
+
   Future<SupplierImportReviewError?> finalizeReview() => _beginFinalization();
   Future<SupplierImportReviewError?> retryPendingFinalization() =>
       _retryFinalization();

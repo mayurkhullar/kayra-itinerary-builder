@@ -1,5 +1,14 @@
 # Supplier extraction staging model
 
+**Review UI implementation status:** Supplier Import review now exposes one
+persistent, one-click `Finalize itinerary` action through the existing controller.
+The flow is exception-driven: server blockers are shown only after an explicit
+attempt, optional warnings require no acknowledgement, and there is no separate
+readiness call. Ambiguous retries reuse the pending command; validated finalized
+content is read-only. Missing package/ancillary exception resolution controls and
+canonical editor/navigation remain separate future work. Production extraction
+requests remain V2.4; this UI change does not deploy or change routing.
+
 **Architecture decision, 2026-10-06:** section 25 resolves the canonical package
 destination and future exception-driven finalization policy. It supersedes the
 earlier destination-neutral discussion. The canonical v2 pure TypeScript domain
@@ -1395,8 +1404,9 @@ draft-model document define package content and its private lineage. No adjacent
 canonical package entity is introduced. `retain_package_level` continues to name
 semantic intent, not a client-selected collection. The pure V2 assembly and
 assessment and internal Admin persistence now implement that destination. A
-separate strict read-only Flutter V2 reader is implemented; UI integration and
-finalization callable deployment remain pending. No production V3 cutover
+separate strict read-only Flutter V2 reader and review finalization UI are
+implemented. Canonical navigation and finalization callable deployment remain
+separate rollout work. No production V3 cutover
 follows from internal backend readiness.
 Neither this decision nor a rerun changes resolution identity, callable-only
 writes, revision checks, append-only audit history or Snapshot immutability.
@@ -1432,9 +1442,9 @@ Internal Admin persistence now creates the V2 draft and private receipt, seals
 the Resolution and creates its finalization event in one transaction. Strict
 stored serializers/readers, replay, authorization/revision checks and capacity
 tests are implemented (section 25.7). The authenticated callable is implemented
-but not deployed; strict read-only Flutter V2 support is implemented, while
-finalization/navigation UI remains future work. The production V2.4 writer and extraction
-path remain unchanged.
+but not deployed; strict read-only Flutter V2 support is implemented, with
+review finalization UI implemented; canonical navigation remains future work.
+The production V2.4 writer and extraction path remain unchanged.
 
 ### 25.1 One canonical destination and explicit versions
 
@@ -1913,7 +1923,8 @@ Authentication, authorization, invalid input, unavailable Snapshot/invalid trust
 state and unexpected infrastructure map respectively to `unauthenticated`,
 `permission-denied`, `invalid-argument`, `failed-precondition` and `internal`.
 Errors have fixed safe messages; logs record only function name and outcome/error
-code. The callable is not deployed, no Flutter finalization UI exists, and
+code. The callable is not deployed; Flutter review finalization UI is
+implemented, and
 `requestItineraryExtraction` remains on V2.4 with no V3 production cutover.
 
 ### 25.8 Rollout boundaries and future verification
@@ -1922,7 +1933,7 @@ No model/prompt/response schema, V2.4 processor, Firebase Rule or client changes
 are made by this internal persistence implementation. The backend V2 validator,
 stored reader/writer, shared assessment and bounded atomic receipt protocol now
 have focused tests. Before enabling finalization, implement and test its trusted
-callable deployment, Flutter reader/UI integration, projections and required access/index
+callable deployment, production Flutter integration, projections and required access/index
 support together. No job cutover is implied.
 
 Backend tests now cover the assembly, persistence and replay cases below;
