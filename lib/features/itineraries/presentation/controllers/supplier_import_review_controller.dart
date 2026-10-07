@@ -2,17 +2,23 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../data/itinerary_draft_v2_repository.dart';
 import '../../data/supplier_extraction_repository.dart';
+import '../../data/supplier_import_finalization_client.dart';
 import '../../data/supplier_import_resolution_mutation_client.dart';
 import '../../data/supplier_import_resolution_repository.dart';
 import '../../domain/supplier_extraction_snapshot.dart';
+import '../../domain/supplier_import_finalization.dart';
 import '../../domain/supplier_import_resolution.dart';
 import '../../domain/supplier_import_resolution_decision.dart';
 import '../../domain/supplier_import_resolution_manual_item.dart';
 import '../../domain/supplier_import_resolution_mutation.dart';
 import '../../domain/supplier_import_resolution_parsing.dart';
 import 'supplier_import_review_error.dart';
+import 'supplier_import_review_finalization_state.dart';
 import 'supplier_import_review_state.dart';
+
+part 'supplier_import_review_finalization.dart';
 
 /// One review session. No method changes its Trip or extraction identity.
 /// Actions return a sanitized error on failure/rejection, and null on success.
@@ -24,6 +30,8 @@ final class SupplierImportReviewController extends ChangeNotifier {
     required SupplierImportResolutionRepository resolutions,
     required SupplierImportResolutionMutationClient mutations,
     String Function()? generateCommandId,
+    SupplierImportFinalizationClient? finalizations,
+    ItineraryDraftV2Repository? drafts,
   }) : tripId = SupplierImportResolutionParsing.id(tripId, 'Trip'),
        extractionId = SupplierImportResolutionParsing.id(
          extractionId,
@@ -32,6 +40,8 @@ final class SupplierImportReviewController extends ChangeNotifier {
        _snapshots = snapshots,
        _resolutions = resolutions,
        _mutations = mutations,
+       _finalizations = finalizations,
+       _drafts = drafts,
        _generateCommandId =
            generateCommandId ?? SupplierImportCommandIdGenerator().generate;
 
@@ -41,6 +51,13 @@ final class SupplierImportReviewController extends ChangeNotifier {
   final SupplierImportResolutionRepository _resolutions;
   final SupplierImportResolutionMutationClient _mutations;
   final String Function() _generateCommandId;
+  final SupplierImportFinalizationClient? _finalizations;
+  final ItineraryDraftV2Repository? _drafts;
+  SupplierImportReviewFinalizationState? _finalization;
+
+  Future<SupplierImportReviewError?> finalizeReview() => _beginFinalization();
+  Future<SupplierImportReviewError?> retryPendingFinalization() =>
+      _retryFinalization();
 
   SupplierImportReviewState _state = const SupplierImportReviewInitial();
   SupplierImportReviewState get state => _state;
@@ -62,13 +79,19 @@ final class SupplierImportReviewController extends ChangeNotifier {
   /// Reuses the immutable Snapshot once loaded. A read alone cannot establish
   /// whether an unconfirmed command was applied, so it preserves that request.
   Future<SupplierImportReviewError?> refresh() async {
-    if (_disposed || _state is SupplierImportReviewSaving) {
+    if (_disposed ||
+        _state is SupplierImportReviewSaving ||
+        _state is SupplierImportReviewFinalizing) {
       return _invalidAction;
     }
     final operation = ++_operation;
     final previous = _state.loaded;
     _emit(
-      SupplierImportReviewLoading(loaded: previous, pendingMutation: _pending),
+      SupplierImportReviewLoading(
+        loaded: previous,
+        pendingMutation: _pending,
+        finalization: _finalization,
+      ),
     );
     if (!_isCurrent(operation)) return _invalidAction;
     if (_snapshot == null) {
@@ -121,6 +144,7 @@ final class SupplierImportReviewController extends ChangeNotifier {
     if (_disposed ||
         !available ||
         _pending != null ||
+        _finalization?.request != null ||
         (start
             ? loaded is! SupplierImportReviewNotStarted
             : loaded is! SupplierImportReviewActive)) {
@@ -131,6 +155,7 @@ final class SupplierImportReviewController extends ChangeNotifier {
         : 0;
     try {
       final mutation = command();
+      _finalization = null; // Prior findings describe the old revision.
       _pending = SupplierImportResolutionMutationRequest(
         tripId: tripId,
         extractionId: extractionId,
@@ -272,6 +297,23 @@ final class SupplierImportReviewController extends ChangeNotifier {
             SupplierImportReviewFinalized(snapshot, resolution),
         };
     }
+    try {
+      _verifyFinalizationResolution(loaded);
+    } on FormatException {
+      return _fail(
+        _malformed,
+        loaded is SupplierImportReviewFinalized ? loaded : previous,
+      );
+    }
+    if (loaded is SupplierImportReviewFinalized && _drafts != null) {
+      try {
+        loaded = await _readFinalizedDraft(loaded);
+      } catch (error) {
+        if (!_isCurrent(operation)) return _invalidAction;
+        return _fail(SupplierImportReviewError.draft(error), loaded);
+      }
+      if (!_isCurrent(operation)) return _invalidAction;
+    }
     final outcome = _outcomeAwaitingRefresh;
     // A confirmed save must be visible before the pending request is cleared.
     // Revision comparisons use only server values, never a local increment.
@@ -306,8 +348,35 @@ final class SupplierImportReviewController extends ChangeNotifier {
         recovery: SupplierImportReviewRecovery.retryPendingMutation,
       );
     }
+    final finalization = _finalization;
+    if (finalization?.phase ==
+        SupplierImportReviewFinalizationPhase.ambiguous) {
+      return _fail(
+        const SupplierImportReviewError(
+          SupplierImportReviewErrorKind.ambiguousNetwork,
+        ),
+        loaded,
+        recovery: SupplierImportReviewRecovery.retryPendingFinalization,
+      );
+    }
+    if (finalization?.phase ==
+        SupplierImportReviewFinalizationPhase.awaitingReload) {
+      _finalization = SupplierImportReviewFinalizationState.result(
+        finalization!.outcome!,
+        attemptedRevision: finalization.attemptedRevision,
+      );
+    }
+    loaded = _withFinalization(loaded);
+    final finalOutcome = _finalization?.outcome;
     _emit(
-      outcome is SupplierImportMutationConflict
+      finalOutcome is SupplierImportFinalizationConflict &&
+              loaded is! SupplierImportReviewFinalized
+          ? SupplierImportReviewConflict(
+              loaded,
+              finalOutcome.currentRevision,
+              finalization: _finalization,
+            )
+          : outcome is SupplierImportMutationConflict
           ? SupplierImportReviewConflict(loaded, outcome.currentRevision)
           : loaded,
     );
@@ -323,10 +392,15 @@ final class SupplierImportReviewController extends ChangeNotifier {
     _emit(
       SupplierImportReviewFailed(
         error: error,
-        recovery: recovery,
+        recovery:
+            _finalization?.phase ==
+                SupplierImportReviewFinalizationPhase.ambiguous
+            ? SupplierImportReviewRecovery.retryPendingFinalization
+            : recovery,
         loaded: previous,
         pendingMutation: _pending,
         outcomeAwaitingRefresh: _outcomeAwaitingRefresh,
+        finalization: _finalization,
       ),
     );
     return error;

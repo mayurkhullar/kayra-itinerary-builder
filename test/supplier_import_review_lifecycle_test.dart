@@ -358,7 +358,7 @@ void main() {
   );
 
   test(
-    'controller boundary has no direct Firebase, canonical, or finalization APIs',
+    'controller boundary has no direct Firebase writes or local readiness policy',
     () {
       final code = File(
         'lib/features/itineraries/presentation/controllers/supplier_import_review_controller.dart',
@@ -367,7 +367,7 @@ void main() {
       expect(code, isNot(contains('package:cloud_functions')));
       expect(code, isNot(contains('FirebaseFirestore')));
       expect(code, isNot(contains('FirebaseFunctions')));
-      expect(code, isNot(contains('ItineraryDraft')));
+      expect(code, isNot(contains('FirestoreItineraryDraftV2Repository(')));
       for (final method in [
         'finalize',
         'approve',

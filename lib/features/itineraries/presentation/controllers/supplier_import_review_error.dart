@@ -1,10 +1,13 @@
+import '../../data/itinerary_draft_v2_repository.dart';
 import '../../data/supplier_extraction_repository.dart';
+import '../../data/supplier_import_finalization_client.dart';
 import '../../data/supplier_import_resolution_mutation_client.dart';
 import '../../data/supplier_import_resolution_repository.dart';
 
 enum SupplierImportReviewErrorKind {
   snapshotLoad,
   resolutionLoad,
+  draftLoad,
   sessionExpired,
   permissionDenied,
   malformedData,
@@ -21,6 +24,8 @@ final class SupplierImportReviewError {
     this.snapshotFailureKind,
     this.resolutionFailureKind,
     this.mutationFailureKind,
+    this.finalizationFailureKind,
+    this.draftFailureKind,
   });
 
   factory SupplierImportReviewError.snapshot(Object error) =>
@@ -69,12 +74,39 @@ final class SupplierImportReviewError {
       SupplierImportReviewErrorKind.ambiguousNetwork,
   }, mutationFailureKind: error.kind);
 
+  factory SupplierImportReviewError.finalization(
+    SupplierImportFinalizationFailure error,
+  ) => SupplierImportReviewError(switch (error.kind) {
+    SupplierImportFinalizationFailureKind.sessionExpired =>
+      SupplierImportReviewErrorKind.sessionExpired,
+    SupplierImportFinalizationFailureKind.permissionDenied =>
+      SupplierImportReviewErrorKind.permissionDenied,
+    SupplierImportFinalizationFailureKind.invalidRequest =>
+      SupplierImportReviewErrorKind.invalidMutation,
+    SupplierImportFinalizationFailureKind.invalidState =>
+      SupplierImportReviewErrorKind.serverPrecondition,
+    SupplierImportFinalizationFailureKind.internal =>
+      SupplierImportReviewErrorKind.unexpected,
+    SupplierImportFinalizationFailureKind.unavailable =>
+      SupplierImportReviewErrorKind.ambiguousNetwork,
+  }, finalizationFailureKind: error.kind);
+  factory SupplierImportReviewError.draft(Object error) =>
+      SupplierImportReviewError(
+        SupplierImportReviewErrorKind.draftLoad,
+        draftFailureKind: error is ItineraryDraftV2RepositoryFailure
+            ? error.kind
+            : null,
+      );
+  final SupplierImportFinalizationFailureKind? finalizationFailureKind;
+  final ItineraryDraftV2RepositoryFailureKind? draftFailureKind;
   final SupplierImportReviewErrorKind kind;
   final SupplierExtractionRepositoryFailureKind? snapshotFailureKind;
   final SupplierImportResolutionRepositoryFailureKind? resolutionFailureKind;
   final SupplierImportMutationFailureKind? mutationFailureKind;
 
   String get userMessage => switch (kind) {
+    SupplierImportReviewErrorKind.draftLoad =>
+      'The finalized itinerary could not be loaded safely. Please refresh.',
     SupplierImportReviewErrorKind.snapshotLoad =>
       'The Supplier Extraction Snapshot could not be loaded. Please try again.',
     SupplierImportReviewErrorKind.resolutionLoad =>
