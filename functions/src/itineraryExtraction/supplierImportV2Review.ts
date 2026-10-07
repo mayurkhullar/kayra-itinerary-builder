@@ -1,45 +1,38 @@
 import type {StagedReviewIssue, SupplierExtractionSnapshot} from "./supplierExtractionSnapshot";
-import type {SupplierImportDecision, SupplierImportResolutionAggregate} from "./supplierImportResolution";
-import {concretelyResolves} from "./supplierImportResolutionValidation";
+import type {SupplierImportResolutionAggregate} from "./supplierImportResolution";
+import {evaluateReviewIssue, permitsReviewOverride, structuralReviewCodes as structural} from "./supplierImportReviewEvidence";
 import type {
   FinalizationBlockerCode, FinalizationFinding, FinalizationWarningCode, SupplierImportAccounting,
 } from "./supplierImportV2AssemblyTypes";
 import {account, canonicalId} from "./supplierImportV2AssemblyValues";
 
-const structural = new Set(["chronology_unknown", "accommodation_span_unknown",
-  "classification_ambiguous", "conflicting_dates", "global_mapping_required", "source_conflict"]);
-
 export function assessAssemblyReview(
   snapshot: SupplierExtractionSnapshot, resolution: SupplierImportResolutionAggregate,
   blockers: FinalizationFinding<FinalizationBlockerCode>[], warnings: FinalizationFinding<FinalizationWarningCode>[],
   accounting: SupplierImportAccounting[],
+  representationSafe = false,
 ): object[] {
   const decisions = new Map(resolution.decisions.map((decision) => [decision.decisionId, decision]));
-  const manualIds = new Set(resolution.manualItems.map((item) => item.itemKind === "consultant_day" ? item.manualDayId : item.manualServiceId));
+  const specificsClear = snapshot.reviewIssues.filter((i) => i.target.kind !== "snapshot").every((i) =>
+    evaluateReviewIssue(i, snapshot, resolution, representationSafe, true) !== "unresolved");
   const remaining: object[] = [];
   for (const issue of snapshot.reviewIssues) {
     const value = decisions.get(issue.id);
     const decision = value?.decisionKind === "review_issue" ? value : undefined;
-    const blocking = structural.has(issue.code) || issue.severity === "blocker" || issue.resolutionRequired;
-    const references = decision?.resolutionReferences.filter((reference) => reference.kind === "decision") ?? [];
-    const concrete = references.map((reference) => decisions.get(reference.decisionId)).filter((item): item is SupplierImportDecision => item !== undefined)
-      .filter((item) => structural.has(issue.code) ? concretelyResolves(issue.code,
-        {kind: "decision", decisionId: item.decisionId}, decisions, manualIds) : hasConcreteChange(item));
-    // Snapshot-wide issues carry no affected-entity list. Conservatively require
-    // coverage of every source day/fact, rather than guessing from message prose.
-    const requiredIds = issue.target.entityId === null ?
-      [...snapshot.days.map((day) => day.id), ...snapshot.facts.filter((fact) => fact.factKind !== "commercial_presence").map((fact) => fact.id)] :
-      [issue.target.entityId];
-    const resolved = decision?.outcome === "resolved" && requiredIds.length > 0 &&
-      requiredIds.every((id) => concrete.some((item) => item.targetEntityId === id));
-    const overridden = decision?.outcome === "overridden" && issue.code === "other";
-    const outcome = blocking && !resolved && !overridden ? "blocked" :
-      overridden ? "review_overridden" : resolved ? "review_resolved" :
+    const evaluation = evaluateReviewIssue(issue, snapshot, resolution, representationSafe, specificsClear);
+    const blocking = evaluation === "unresolved";
+    const resolved = evaluation === "derived" || evaluation === "explicit";
+    const overridden = evaluation === "overridden";
+    const outcome = blocking ? "blocked" : overridden ? "review_overridden" :
+      evaluation === "derived" ? "review_derived" : resolved ? "review_resolved" :
         decision?.outcome === "acknowledged" ? "review_acknowledged" : "review_open_warning";
-    account(accounting, issue.id, "review_issue", issue.sources, decision, outcome,
+    account(accounting, issue.id, "review_issue", issue.sources, evaluation === "derived" ? undefined : decision, outcome,
       outcome === "review_open_warning" || outcome === "review_acknowledged" ?
         [canonicalId(snapshot, "review", issue.id)] : []);
     if (blocking && !resolved && !overridden) {
+      if (representationSafe && permitsReviewOverride(issue) && (issue.target.kind !== "snapshot" || specificsClear)) {
+        warnings.push({code: "review_issue_override_available", targetKind: "review_issue", targetId: issue.id});
+      }
       blockers.push({code: structural.has(issue.code) ? "structural_review_issue_unresolved" : "unresolved_review_issue",
         targetKind: "review_issue", targetId: issue.id});
     } else if (overridden) {
@@ -52,14 +45,6 @@ export function assessAssemblyReview(
     }
   }
   return remaining;
-}
-
-function hasConcreteChange(decision: SupplierImportDecision): boolean {
-  if (decision.decisionKind === "review_issue") return false;
-  if ("overrides" in decision && Object.keys(decision.overrides).length > 0) return true;
-  if ("disposition" in decision && !["retain", "retain_package_level", "accept"].includes(decision.disposition)) return true;
-  return (decision.decisionKind === "day" || decision.decisionKind === "service") && decision.canonicalOrder !== undefined ||
-    decision.decisionKind === "service" && decision.day !== undefined;
 }
 
 function reviewPath(issue: StagedReviewIssue): string {

@@ -71,20 +71,33 @@ class ReviewSummary extends StatelessWidget {
 }
 
 class SnapshotReviewIssues extends StatelessWidget {
-  const SnapshotReviewIssues({super.key, required this.snapshot});
+  const SnapshotReviewIssues({
+    super.key,
+    required this.snapshot,
+    this.issueActionBuilder,
+    this.requiredIssueIds,
+    this.visibleIssueIds,
+  });
   final SupplierExtractionSnapshot snapshot;
+  final Widget Function(String)? issueActionBuilder;
+  final Set<String>? requiredIssueIds;
+  final Set<String>? visibleIssueIds;
   @override
   Widget build(BuildContext context) {
-    final issues = [...snapshot.reviewIssues]
-      ..sort((a, b) {
-        final severity = b.severity.index.compareTo(a.severity.index);
-        return severity != 0
-            ? severity
-            : a.snapshotOrder.compareTo(b.snapshotOrder);
-      });
+    final issues =
+        [
+          ...snapshot.reviewIssues.where(
+            (i) => visibleIssueIds == null || visibleIssueIds!.contains(i.id),
+          ),
+        ]..sort((a, b) {
+          final severity = b.severity.index.compareTo(a.severity.index);
+          return severity != 0
+              ? severity
+              : a.snapshotOrder.compareTo(b.snapshotOrder);
+        });
     return ReviewSection(
       key: const ValueKey('review-issues'),
-      title: 'Needs attention',
+      title: 'Supplier observations',
       child: ReviewPanel(
         child: issues.isEmpty
             ? const Text('No review issues were flagged in this extraction.')
@@ -102,12 +115,13 @@ class SnapshotReviewIssues extends StatelessWidget {
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             ReviewBadge(
-                              reviewLabel(issue.severity.value),
+                              requiredIssueIds?.contains(issue.id) == true
+                                  ? 'Needs attention'
+                                  : 'Source observation',
                               strong:
-                                  issue.severity ==
-                                  SupplierExtractionReviewSeverity.blocker,
+                                  requiredIssueIds?.contains(issue.id) == true,
                             ),
-                            if (issue.resolutionRequired)
+                            if (requiredIssueIds?.contains(issue.id) == true)
                               Text(
                                 'Resolution required',
                                 style: Theme.of(context).textTheme.labelMedium,
@@ -124,6 +138,8 @@ class SnapshotReviewIssues extends StatelessWidget {
                           ('Issue', reviewLabel(issue.code.value)),
                         ]),
                         ReviewSources(issue.sources),
+                        if (issueActionBuilder != null)
+                          issueActionBuilder!(issue.id),
                       ],
                     ),
                   ),

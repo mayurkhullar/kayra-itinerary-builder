@@ -1184,8 +1184,9 @@ text field.
 
 ### 24.11 Review-issue decisions
 
-Absence of a `review_issue` decision means the issue remains open. Viewing an
-issue never writes a decision. The controlled outcomes are:
+Absence of a `review_issue` decision does not prevent automatic resolution from
+substantive target-specific evidence. Viewing an issue never writes a decision.
+Historical explicit decisions retain these controlled outcomes:
 
 ```text
 acknowledged | resolved | overridden
@@ -1200,14 +1201,48 @@ acknowledged | resolved | overridden
 - `overridden` is exceptional. It requires a controlled reason and concise
   note, is auditable, and may not make an invalid canonical result valid.
 
-`chronology_unknown`, `accommodation_span_unknown`,
-`classification_ambiguous`, `conflicting_dates`, `global_mapping_required` and
-`source_conflict` require a concrete mapping, correction, routing or exclusion;
-they cannot be dismissed by acknowledgement. For the initial contract, only an
-`other` warning or blocker may use `overridden`, and only when server policy
-confirms that no fact would be lost. Expanding that allowlist requires a schema
-or policy review. Any issue with `resolutionRequired: true` must be `resolved`
-or validly `overridden`, regardless of warning severity.
+The pure `supplierImportReviewEvidence` policy is authoritative. Optional
+non-structural warnings never require acknowledgement. Existing valid explicit
+reference decisions remain readable; duplicate/missing references remain invalid.
+There is no migration and no new callable.
+
+Targeted chronology resolves through explicit day order, or service placement
+with explicit order. Classification requires a service-type correction. Date
+conflicts require an applicable date set/clear. Exclusion resolves the exact
+non-`other` target. Unknown accommodation span can remain losslessly package-wide
+through explicit retention; timeline span requires an effective valid date pair
+with an applicable correction. Global mapping resolves through explicit package
+retention/mapping, service assignment/order or ancillary disposition. No dates,
+prices or chronology are generated.
+
+`source_conflict` has no field locator: unrelated text changes cannot prove the
+conflict resolved. Exclusion resolves it; otherwise an exceptional controlled
+interpretation is required. `other` never auto-resolves from unrelated edits.
+Historical explicit, validated evidence decisions retain their prior semantics.
+
+Controlled override is permitted for `other`, `source_conflict`, or snapshot-wide
+issues only. New expanded-policy overrides require the controlled `other` reason
+and fixed note `Use reviewed itinerary without changing supplier facts.` No free
+text is introduced by the UI. The assembler additionally requires schema-valid,
+non-commercial, losslessly representable content; snapshot-wide overrides also
+require every more-specific issue to be resolved. Arbitrary `other` prose is not
+interpreted as a field locator. Global issues have no affected-entity set, so one
+explicit interpretation replaces blanket decisions on unaffected facts. Previously
+valid fully evidenced global decisions remain compatible.
+
+Backend assembly returns the existing unresolved blocker codes and, only when
+eligible, a safe `review_issue_override_available` warning capability. Flutter
+uses a fresh matching-revision assessment to show one `Use reviewed itinerary`
+action. It sends one existing `set_decision` mutation and reloads; no modal,
+readiness call, polling, auto-finalization or extra acknowledgement follows an
+ordinary fix. Stale findings/capabilities disappear after mutation; source
+observations remain secondary until the next explicit Finalize assessment.
+Finalized state stays read-only. Receipts distinguish `review_derived` (no invented
+issue decision) from historical `review_resolved`, explicit `review_overridden`,
+and optional `review_open_warning`, without copying issue prose.
+
+No AI is involved. Production extraction remains V2.4-only; other V3 cutover gaps
+remain separate work.
 
 ### 24.12 Consultant-authored days and services
 
@@ -1638,41 +1673,13 @@ city/or-similar/night-count fields. If the supported mapping cannot preserve the
 fact, keep it package-wide or require explicit valid corrections; block the map.
 Do not flatten structure to prose or replicate a fact across several services.
 
-Future review policy distinguishes:
-
-| Issue class | Finalization behavior |
-|---|---|
-| `severity: blocker` | Blocks until concretely resolved, or validly overridden only under the existing narrow `other` policy with no invalid/lost content. |
-| Structural code | Blocks while unresolved, regardless of a permissive AI severity/flag. Codes: `chronology_unknown`, `accommodation_span_unknown`, `classification_ambiguous`, `conflicting_dates`, `global_mapping_required`, `source_conflict`. Acknowledge/override cannot substitute for structural resolution. |
-| Non-structural warning with `resolutionRequired: true` | Requires supported resolution or narrow valid `other` override. Acknowledgement is insufficient. |
-| Non-structural warning with `resolutionRequired: false` | Open is non-blocking; acknowledgement is optional and audited. It does not change source truth. |
-| Informational | Snapshot issues currently have only warning/blocker severities. Do not invent an `info` issue variant. Commercial presence is a separate assessment informational result. |
-
-The shared pure assessment/assembly now enforces the structural-code rule above,
-including historical acknowledgements that remain valid intermediate decisions.
-It reuses existing concrete-resolution predicates and requires correction of the
-actual target. Snapshot-wide issues have no typed affected-entity list, so the
-policy conservatively requires concrete referenced coverage of every source day
-and non-commercial fact; an unrelated correction cannot waive the issue. The
-mutation contract remains unchanged and may store intermediate blocked states.
-
-Adding a package destination does not silently resolve historical
-`global_mapping_required` issues. An explicit “keep package-wide” action can
-record a retain decision and a validated resolved-issue reference together when
-the sole issue was lack of a package destination. Similarly, confirming an
-undated package scope may resolve `accommodation_span_unknown` **only** where
-the issue was inability to place it on a day, not conflicting/ambiguous supplied
-dates. Future typed issue-resolution predicates must make that distinction
-explicit; do not infer it from free-text issue messages. If the existing issue
-cannot express/prove the narrower reason, keep it blocked until the consultant
-supplies a supported concrete correction or exclusion. Never invent dates to
-satisfy it. Actual date/source conflicts still require concrete resolution.
-
-Targeted issue decisions must reference the actual correction, assignment,
-mapping, scope confirmation or exclusion covering the issue. Excluding one
-target resolves only issues whose affected content has genuinely been removed.
-Snapshot-wide issues require coverage of all affected retained content. Default
-inclusion, a bare acknowledgement, or an unrelated decision ID is not evidence.
+Review readiness now uses the single evidence policy in section 24.11. Structural
+codes remain blocking irrespective of provider severity until substantive
+matching evidence or a permitted controlled interpretation resolves them.
+Optional warnings require no acknowledgement. Default retention alone never
+waives an issue, and a decision for another entity cannot resolve it. Snapshot-
+wide issues no longer require blanket consultant decisions on unaffected facts.
+Canonical/representation gates remain independent and cannot be overridden.
 
 Only applicable open non-blocking warnings enter the canonical `reviewIssues`
 array, using deterministic IDs and valid canonical field targets. Resolved or

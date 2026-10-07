@@ -125,7 +125,7 @@ void main() {
   });
 
   testWidgets(
-    'summary uses actual counts and explicit blocker/warning severity',
+    'summary preserves source counts without claiming current unresolved blockers',
     (tester) async {
       await show(tester);
       for (final (label, count) in [
@@ -144,9 +144,11 @@ void main() {
           '$count',
         );
       }
-      expect(find.widgetWithText(ReviewBadge, 'Blocker'), findsNWidgets(3));
-      expect(find.widgetWithText(ReviewBadge, 'Warning'), findsNWidgets(3));
-      expect(find.text('Resolution required'), findsNWidgets(3));
+      expect(
+        find.widgetWithText(ReviewBadge, 'Source observation'),
+        findsNWidgets(6),
+      );
+      expect(find.text('Resolution required'), findsNothing);
       expect(find.text('Whole extraction'), findsOneWidget);
       expect(
         tester

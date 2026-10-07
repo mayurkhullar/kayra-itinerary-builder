@@ -264,9 +264,9 @@ test('targeted package exclusion can concretely resolve its issue', () => {
   ready(assemble(source, {decisions: [packageDecision('package-fact-1', 'package_accommodation', exclusion()),
     reviewDecision({resolutionReferences: [{kind: 'decision', decisionId: 'package-fact-1'}]})]}));
 });
-test('retain-package is not a blanket waiver for ambiguous hotel span', () => {
+test('explicit package retention preserves an unknown span without inventing dates', () => {
   const source = snapshot({packageFacts: {accommodations: [{hotelName: 'Hotel'}]}, reviewIssues: [issue({code: 'accommodation_span_unknown', target: {kind: 'package_fact', factType: 'accommodation', factIndex: 1}})]});
-  blocked(assemble(source, {decisions: [packageDecision('package-fact-1', 'package_accommodation')]}), 'structural_review_issue_unresolved');
+  ready(assemble(source, {decisions: [packageDecision('package-fact-1', 'package_accommodation')]}));
 });
 test('narrow other override remains valid with rationale', () => {
   const source = snapshot({reviewIssues: [issue({severity: 'blocker'})]});

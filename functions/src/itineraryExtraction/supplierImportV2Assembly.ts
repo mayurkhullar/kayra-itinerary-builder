@@ -73,11 +73,23 @@ export function assembleSupplierImportV2(
   const structure = findAssemblyStructureIssues(snapshot, resolution);
   blockers.push(...structure.blockers);
   informational.push(...structure.informational);
-  const reviewIssues = assessAssemblyReview(snapshot, resolution, blockers, warnings, accounting);
   const timeline = buildTimeline(snapshot, resolution, accounting);
   const packageContent = buildPackageContent(snapshot, resolution, importResult, timeline, accounting, blockers);
   const titleDecision = resolution.decisions.find((decision) => decision.decisionKind === "title");
   const title = titleDecision?.overrides.title?.value ?? snapshot.title.text;
+  let representationSafe = blockers.length === 0;
+  if (representationSafe) {
+    try {
+      validateItineraryDraftV2(context.draftId, {tripId: context.tripId,
+        schemaVersion: itineraryDraftV2SchemaVersion, title, days: timelineMap(timeline),
+        sourcePackageIds: [snapshot.sourcePackageId], reviewIssues: [], createdByUid: context.actorUid,
+        createdAt: context.createdAt, updatedAt: context.updatedAt, packageContent, importResult});
+    } catch {
+      representationSafe = false;
+      blockers.push({code: "canonical_validation_failed", targetKind: "resolution", targetId: resolutionId});
+    }
+  }
+  const reviewIssues = assessAssemblyReview(snapshot, resolution, blockers, warnings, accounting, representationSafe);
   account(accounting, "title", "title", snapshot.title.sources, titleDecision,
     titleDecision ? "explicit_retained" : "auto_retained", [context.draftId]);
   for (const fact of snapshot.facts) {

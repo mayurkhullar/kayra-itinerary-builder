@@ -154,15 +154,15 @@ function validateDisposition(item: SupplierImportReceiptOutcome): void {
   const allowed = kind === "title" ? ["auto_retained", "explicit_retained"] :
     kind === "consultant_day" || kind === "consultant_service" ? ["manual"] :
       kind === "commercial_presence" ? ["informational"] :
-        kind === "review_issue" ? ["review_resolved", "review_overridden", "review_open_warning", "review_acknowledged"] :
+        kind === "review_issue" ? ["review_resolved", "review_derived", "review_overridden", "review_open_warning", "review_acknowledged"] :
           kind === "flight" || kind === "visa" ? ["handled_separately", "routed", "excluded"] :
             kind.startsWith("package_") ? ["auto_retained", "explicit_retained", "mapped", "excluded"] :
               ["auto_retained", "explicit_retained", "excluded"];
   if (!allowed.includes(code)) receiptInvalid();
-  const automatic = ["auto_retained", "manual", "informational"].includes(code);
+  const automatic = ["auto_retained", "manual", "informational", "review_derived"].includes(code);
   if (automatic && (decisions.length !== 0 || operations.length !== 0) ||
       !automatic && code !== "review_open_warning" && decisions.length !== 1) receiptInvalid();
-  if (["excluded", "informational", "handled_separately", "routed", "review_resolved", "review_overridden"].includes(code)) {
+  if (["excluded", "informational", "handled_separately", "routed", "review_resolved", "review_derived", "review_overridden"].includes(code)) {
     if (outputs.length !== 0) receiptInvalid();
     return;
   }

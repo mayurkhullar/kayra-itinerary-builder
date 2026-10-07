@@ -13,7 +13,7 @@ export const receiptTargetKinds = Object.freeze(["title", "day", "service", "pac
   "package_inclusion", "package_exclusion", "package_condition", "flight", "visa",
   "commercial_presence", "consultant_day", "consultant_service", "review_issue"] as const);
 export const receiptOutcomeCodes = Object.freeze(["auto_retained", "explicit_retained", "mapped", "excluded",
-  "manual", "handled_separately", "routed", "informational", "review_resolved",
+  "manual", "handled_separately", "routed", "informational", "review_resolved", "review_derived",
   "review_overridden", "review_open_warning", "review_acknowledged"] as const);
 export const receiptOutputKinds = Object.freeze(["draft", "day", "service", "package_accommodation",
   "accommodation_option", "package_inclusion", "package_exclusion", "package_condition", "review_issue"] as const);

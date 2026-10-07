@@ -27,6 +27,7 @@ export type FinalizationBlockerCode =
   "canonical_validation_failed";
 
 export type FinalizationWarningCode =
+  "review_issue_override_available" |
   "snapshot_warning_open" |
   "snapshot_warning_acknowledged" |
   "review_issue_overridden";
@@ -67,7 +68,7 @@ export interface SupplierImportV2AssemblyContext {
 
 export type ImportAccountingOutcome = "auto_retained" | "explicit_retained" |
   "mapped" | "excluded" | "blocked" | "manual" | "handled_separately" |
-  "routed" | "informational" | "review_resolved" | "review_overridden" |
+  "routed" | "informational" | "review_resolved" | "review_derived" | "review_overridden" |
   "review_open_warning" | "review_acknowledged";
 
 /** Private finalizer input, separate from the canonical candidate. Never a receipt. */

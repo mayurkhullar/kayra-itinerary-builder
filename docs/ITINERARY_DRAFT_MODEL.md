@@ -1,5 +1,15 @@
 # Structured itinerary draft model
 
+Review issues are evaluated by the pure backend `supplierImportReviewEvidence`
+policy consumed by assembly. Matching substantive decisions resolve targeted
+issues without another acknowledgement write. Optional warnings need no action.
+Exceptional controlled overrides require authoritative representation checks;
+snapshot-wide overrides also require no unresolved more-specific issue. They do
+not demand blanket decisions on unaffected facts. Receipts distinguish derived
+resolution from explicit issue decisions. Flutter renders backend findings and
+capabilities only, with no readiness calls or AI. Production remains V2.4-only;
+this change does not establish V3 cutover readiness.
+
 ### Deterministic commercial-value boundary
 
 Trusted V3 normalization, stored Snapshot reads, Resolution corrections/manual

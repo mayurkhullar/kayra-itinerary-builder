@@ -1,3 +1,5 @@
+import '../../domain/supplier_import_finalization.dart';
+import '../widgets/supplier_import/review_issue_action.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/layout/app_layout.dart';
@@ -159,6 +161,14 @@ class _SupplierImportReviewPageState extends State<SupplierImportReviewPage> {
   Widget build(BuildContext context) {
     final state = _controller.state;
     final loaded = state.loaded;
+    final outcome = state.finalization?.outcome;
+    final assessment =
+        state is SupplierImportReviewActive &&
+            outcome is SupplierImportFinalizationNotReady &&
+            outcome.evaluatedRevision == state.resolution.root.revision
+        ? outcome
+        : null;
+
     final serviceReview = loaded == null
         ? null
         : StagedServiceReviewData(state);
@@ -264,7 +274,48 @@ class _SupplierImportReviewPageState extends State<SupplierImportReviewPage> {
                     final content = Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        SnapshotReviewIssues(snapshot: loaded.snapshot),
+                        SnapshotReviewIssues(
+                          snapshot: loaded.snapshot,
+                          requiredIssueIds: assessment?.blockers
+                              .where(
+                                (f) =>
+                                    f.targetKind ==
+                                    SupplierImportFinalizationTargetKind
+                                        .reviewIssue,
+                              )
+                              .map((f) => f.targetId!)
+                              .toSet(),
+                          visibleIssueIds: assessment == null
+                              ? null
+                              : {
+                                  ...assessment.blockers
+                                      .where(
+                                        (f) =>
+                                            f.targetKind ==
+                                            SupplierImportFinalizationTargetKind
+                                                .reviewIssue,
+                                      )
+                                      .map((f) => f.targetId!),
+                                  ...assessment.warnings
+                                      .where(
+                                        (f) =>
+                                            f.code ==
+                                                SupplierImportFinalizationWarningCode
+                                                    .snapshotWarningOpen ||
+                                            f.code ==
+                                                SupplierImportFinalizationWarningCode
+                                                    .snapshotWarningAcknowledged,
+                                      )
+                                      .map((f) => f.targetId!),
+                                },
+                          issueActionBuilder: (id) => ReviewIssueAction(
+                            issueId: id,
+                            state: state,
+                            onOverride: (decision) => _applyInlineDecision(
+                              () => _controller.setDecision(decision),
+                            ),
+                          ),
+                        ),
                         SnapshotItinerary(
                           snapshot: loaded.snapshot,
                           dayReviewBuilder: (day) => StagedDayDecisionPanel(

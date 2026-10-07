@@ -150,14 +150,24 @@ class ReviewFinalizationAction extends StatelessWidget {
                                       ),
                               ),
                             ),
-                          if (findings.warnings.isNotEmpty) ...[
+                          if (findings.warnings.any(
+                            (w) =>
+                                w.code !=
+                                SupplierImportFinalizationWarningCode
+                                    .reviewIssueOverrideAvailable,
+                          )) ...[
                             Text(
                               'Also worth checking',
                               style: theme.textTheme.labelMedium?.copyWith(
                                 color: AppColors.textSecondary,
                               ),
                             ),
-                            for (final warning in findings.warnings)
+                            for (final warning in findings.warnings.where(
+                              (w) =>
+                                  w.code !=
+                                  SupplierImportFinalizationWarningCode
+                                      .reviewIssueOverrideAvailable,
+                            ))
                               Text(
                                 finalizationFindingLabel(warning.code.value),
                                 style: theme.textTheme.bodySmall?.copyWith(

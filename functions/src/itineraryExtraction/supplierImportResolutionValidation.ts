@@ -1,3 +1,5 @@
+export {concretelyResolves} from "./supplierImportReviewEvidence";
+import {permitsReviewOverride, reviewedInterpretationNote, structuralReviewCodes, concretelyResolves} from "./supplierImportReviewEvidence";
 import {
   AncillaryFlightFact,
   AncillaryVisaFact,
@@ -993,8 +995,9 @@ function validateReviewDecision(
       (issue.severity !== "warning" || issue.resolutionRequired)) {
     invalid("Only optional warning may be acknowledged.");
   }
-  if (decision.outcome === "overridden" && issue.code !== "other") {
-    invalid("Only an 'other' review issue may be overridden.");
+  if (decision.outcome === "overridden" && (!permitsReviewOverride(issue) ||
+      issue.code !== "other" && (decision.overrideReason !== "other" || decision.overrideNote !== reviewedInterpretationNote))) {
+    invalid("Review issue override is not permitted.");
   }
   if (decision.outcome !== "resolved") return;
   const manualIds = new Set(manualItems.map(manualItemId));
@@ -1014,78 +1017,6 @@ function validateReviewDecision(
         concretelyResolves(issue.code, reference, decisions, manualIds))) {
     invalid("Structural review resolution lacks a concrete correction or mapping.");
   }
-}
-
-const structuralReviewCodes = new Set([
-  "chronology_unknown", "accommodation_span_unknown",
-  "classification_ambiguous", "conflicting_dates", "global_mapping_required",
-  "source_conflict",
-]);
-
-export function concretelyResolves(
-  code: StagedReviewIssue["code"],
-  reference: ResolutionReference,
-  decisions: Map<string, SupplierImportDecision>,
-  manualIds: ReadonlySet<string>,
-): boolean {
-  if (reference.kind === "manual_item") {
-    return manualIds.has(reference.manualItemId) && code === "chronology_unknown";
-  }
-  const related = decisions.get(reference.decisionId);
-  if (related === undefined || related.decisionKind === "review_issue" ||
-      related.decisionKind === "title") return false;
-  if ("disposition" in related && related.disposition === "exclude") return true;
-  switch (code) {
-  case "chronology_unknown":
-    return related.decisionKind === "service" && related.day !== undefined &&
-      related.canonicalOrder !== undefined ||
-      related.decisionKind === "day" && related.canonicalOrder !== undefined;
-  case "accommodation_span_unknown":
-    return related.decisionKind === "package_accommodation" &&
-      (related.overrides.checkInDate?.operation === "set" ||
-       related.overrides.checkOutDate?.operation === "set") ||
-      related.decisionKind === "service" && related.overrides.hotel !== undefined &&
-      (related.overrides.hotel.checkInDate?.operation === "set" ||
-       related.overrides.hotel.checkOutDate?.operation === "set");
-  case "classification_ambiguous":
-    return related.decisionKind === "service" &&
-      related.overrides.serviceType?.operation === "set";
-  case "conflicting_dates":
-    return hasDateCorrection(related);
-  case "global_mapping_required":
-    return related.decisionKind === "package_accommodation" &&
-      related.disposition === "map_to_day_service" ||
-      (related.decisionKind === "package_statement" ||
-       related.decisionKind === "package_condition") &&
-      related.disposition === "map_to_service" ||
-      related.decisionKind === "service" && related.day !== undefined ||
-      related.decisionKind === "flight" || related.decisionKind === "visa";
-  case "source_conflict":
-    return decisionHasOverrides(related);
-  case "other": return false;
-  }
-}
-
-function hasDateCorrection(decision: SupplierImportDecision): boolean {
-  if (decision.decisionKind === "day") return decision.overrides.date !== undefined;
-  if (decision.decisionKind === "service") {
-    return decision.overrides.hotel?.checkInDate !== undefined ||
-      decision.overrides.hotel?.checkOutDate !== undefined;
-  }
-  if (decision.decisionKind === "package_accommodation") {
-    return decision.overrides.checkInDate !== undefined ||
-      decision.overrides.checkOutDate !== undefined;
-  }
-  if (decision.decisionKind === "flight") {
-    return decision.overrides.departureDate !== undefined ||
-      decision.overrides.arrivalDate !== undefined;
-  }
-  return false;
-}
-
-function decisionHasOverrides(decision: SupplierImportDecision): boolean {
-  if (!("overrides" in decision)) return false;
-  return Object.keys(decision.overrides).length > 0;
 }
 
 function parseExclusion(

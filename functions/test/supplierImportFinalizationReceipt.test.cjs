@@ -358,3 +358,12 @@ test('receipt modules remain pure, private and independent of persistence/provid
     assert(!/Buffer\.byteLength|TextEncoder/.test(text), file);
   }
 });
+
+test('derived issue accounting never invents an explicit issue decision or copies prose', () => {
+  const source = f.snapshot({days: [f.day()], reviewIssues: [f.issue({code: 'chronology_unknown', target: {kind: 'day', dayIndex: 1}})]});
+  const result = create(ready(assemble(source, {decisions: [f.dayDecision('staged-day-1', {canonicalOrder: 2})]})), ctx());
+  assert.equal(row(result, 'review-1').outcome, 'review_derived');
+  assert.deepEqual(row(result, 'review-1').decisionIds, []);
+  assert.equal(JSON.stringify(toMap(result)).includes('Check source detail'), false);
+  assert.equal(fromMap(toMap(result)).outcomes.find(x => x.targetId === 'review-1').outcome, 'review_derived');
+});

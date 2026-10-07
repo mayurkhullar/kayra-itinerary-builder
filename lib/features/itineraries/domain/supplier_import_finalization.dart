@@ -64,6 +64,7 @@ enum SupplierImportFinalizationBlockerCode {
 }
 
 enum SupplierImportFinalizationWarningCode {
+  reviewIssueOverrideAvailable('review_issue_override_available'),
   snapshotWarningOpen('snapshot_warning_open'),
   snapshotWarningAcknowledged('snapshot_warning_acknowledged'),
   reviewIssueOverridden('review_issue_overridden');
