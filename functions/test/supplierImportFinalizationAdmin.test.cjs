@@ -250,3 +250,14 @@ test('Admin engine remains internal and logs no source/canonical/SDK payload', (
   // The callable may delegate to this engine; persistence remains internal.
   assert(!fs.readFileSync(path.join(dir, 'supplierImportFinalizationAdmin.ts'), 'utf8').includes('onCall('));
 });
+
+for (const [index, value] of ['Commission 12%', 'CNY 500'].entries()) {
+  test(`injected commercial Snapshot variant ${index} cannot create any finalization evidence`, async () => {
+    const x = fixture();
+    x.db.records.get(`${x.paths.snapshot}/facts/staged-service-1`).value.notes = value;
+    const old = before(x), result = await run(x);
+    assert.equal(result.outcome, 'trusted_state_invalid');
+    assert.equal(JSON.stringify(result).includes(value), false);
+    unchanged(x, old);
+  });
+}

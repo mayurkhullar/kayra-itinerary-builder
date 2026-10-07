@@ -58,8 +58,7 @@ export function text(value: unknown, label: string, directPayment = false): stri
   const terms = directPayment ? result.replace(/\bdirect\s+payment\b/giu, "") : result;
   // Deterministic rejection of known commercial patterns, not a claim that a
   // regex can authenticate prose or replace later publication sanitization.
-  if (containsCommercialValue(result) || containsCommercialTerm(terms) ||
-      /\b(?:pricing|costs?|rates?|selling\s+price|payment\s+schedule)\b/iu.test(terms)) {
+  if (containsCommercialValue(result) || containsCommercialTerm(terms, true)) {
     invalid(`${label} contains commercial content.`);
   }
   return result;

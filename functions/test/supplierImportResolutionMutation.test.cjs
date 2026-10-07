@@ -383,3 +383,34 @@ test('BA/BB mutation modules import no draft writer and export no callable', () 
     assert.doesNotMatch(source, /draftWriter|onCall|firebase-functions\/v2\/https/u);
   }
 });
+
+for (const [name, mutation] of [
+  ['day', value => ({action: 'set_decision', decision: {decisionKind: 'day',
+    targetEntityId: 'staged-day-1', disposition: 'retain', overrides: {notes: {operation: 'set', value}},
+    exclusionReason: null, exclusionNote: null}})],
+  ['service', value => ({action: 'set_decision', decision: serviceDecision({overrides: {description: {operation: 'set', value}}})})],
+  ['list', value => ({action: 'set_decision', decision: serviceDecision({overrides: {inclusions: {operation: 'set', value: [value]}}})})],
+  ['package mapping', value => ({action: 'set_decision', decision: {
+    decisionKind: 'package_statement', targetEntityId: 'package-fact-2', disposition: 'map_to_service',
+    service: {kind: 'staged_service', serviceId: 'staged-service-1'}, destination: 'service_inclusion',
+    overrides: {text: {operation: 'set', value}}, exclusionReason: null, exclusionNote: null}})],
+  ['manual day', value => ({action: 'upsert_manual_item', item: {...dayItem(), notes: value}})],
+  ['manual service', value => ({action: 'upsert_manual_item', item: {...serviceItem(), day: {kind: 'staged_day', dayId: 'staged-day-1'}, description: value}})],
+]) {
+  for (const [index, value] of ['Commission 12%', 'CNY 500'].entries()) {
+    test(`commercial ${name} variant ${index} rejected before persistence`, async () => {
+      const source = snapshot(), store = new MemoryStore(); await start(store, source);
+      const before = JSON.stringify(store.aggregate);
+      await assert.rejects(() => mutateSupplierImportResolution(source,
+        {...request('unused', 1, 'blocked'), mutation: mutation(value)}, actor, at, store), error => {
+        assert.equal(String(error).includes(value), false);
+        assert.equal(JSON.stringify(error).includes(value), false);
+        return invalid(error);
+      });
+      assert.equal(store.commits.length, 1); assert.equal(JSON.stringify(store.aggregate), before);
+      const good = await mutateSupplierImportResolution(source,
+        {...request('unused', 1, 'allowed'), mutation: mutation('Safe wording')}, actor, at, store);
+      assert.equal(good.outcome, 'applied');
+    });
+  }
+}

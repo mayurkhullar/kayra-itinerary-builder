@@ -1,5 +1,26 @@
 # Supplier extraction staging model
 
+### Deterministic commercial-value boundary
+
+Trusted V3 normalization, stored Snapshot reads, Resolution corrections/manual
+items, package text and canonical V2 validation share
+`nonCommercialText.containsCommercialValue`. It rejects commercial labels with
+numeric/percentage values and supported currency-code/name/symbol amounts,
+including compact forms. Detection-only Unicode/whitespace normalization never
+redacts or rewrites stored prose. Bare travel counts, percentages and isolated
+currency punctuation are not commercial values by themselves. Existing stricter
+schema restrictions on value-free commercial terms remain in effect.
+
+Violations fail closed through existing typed validation/mutation failures or
+assembly blockers, before persistence; injected stored content is revalidated.
+No offending value is included in errors/findings or provider logs. The boundary
+adds no AI calls or repair pass. Commercial-presence metadata remains categorical
+and value-free. This deterministic pattern policy is not a guarantee of semantic
+recognition of every possible language or obfuscation.
+
+Production extraction remains **V2.4-only**. This hardening does not enable V3
+cutover or resolve the remaining review, representation and rollout gaps.
+
 **Review UI implementation status:** Supplier Import review now exposes one
 persistent, one-click `Finalize itinerary` action through the existing controller.
 The flow is exception-driven: server blockers are shown only after an explicit

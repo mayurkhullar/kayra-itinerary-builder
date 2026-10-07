@@ -633,3 +633,16 @@ test('production processor and V2.4 provider do not import the V3 adapter', () =
     assert.doesNotMatch(contents, /geminiSupplierExtractionStagingProvider/);
   }
 });
+
+for (const [index, value] of ['Commission 12%', 'CNY 500'].entries()) {
+  test(`confirmed commercial escape ${index} fails safely after one generation without logging content`, async () => {
+    const f = fixture({response: {text: JSON.stringify({days: [{title: 'Arrival', notes: value}]}),
+      candidates: [{finishReason: 'STOP'}]}});
+    await assert.rejects(f.provider.extract(input([sourceFile('file-1', 'application/pdf')])), error => {
+      assert.equal(String(error).includes(value), false);
+      return providerFailure('PROVIDER_EXECUTION_FAILED', 'invalid_v3_response')(error);
+    });
+    assert.equal(f.calls.length, 1);
+    assert.equal(JSON.stringify(f.logs).includes(value), false);
+  });
+}

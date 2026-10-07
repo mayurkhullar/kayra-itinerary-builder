@@ -1,3 +1,4 @@
+import {containsCommercialValue} from "./nonCommercialText";
 import {
   AncillaryFlightFact,
   AncillaryVisaFact,
@@ -646,20 +647,9 @@ function requiredText(input: unknown, label: string): string {
   return input;
 }
 
-const currencyCode = "(?:INR|USD|EUR|GBP|AED|AUD|CAD|CHF|JPY|SGD|THB)";
-const commercialPattern = new RegExp([
-  `(?:[$€£₹]\\s*\\d)`,
-  `(?:\\d[\\d,.]*\\s*(?:[$€£₹]|${currencyCode}\\b))`,
-  `(?:\\b${currencyCode}\\s*\\d)`,
-  "(?:\\b(?:price|pricing|cost|total|amount|rate|supplement|margin|payment)" +
-    "\\b[^.!?\\n]{0,32}\\d)",
-  "(?:\\d[^.!?\\n]{0,32}\\b(?:price|pricing|cost|total|amount|rate|" +
-    "supplement|margin|payment)\\b)",
-].join("|"), "i");
-
 function semanticText(input: unknown, label: string): string {
   const value = requiredText(input, label);
-  if (commercialPattern.test(value)) {
+  if (containsCommercialValue(value)) {
     invalid(`${label} contains commercial data.`);
   }
   return value;
