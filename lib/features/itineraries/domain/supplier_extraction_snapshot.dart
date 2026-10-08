@@ -81,6 +81,7 @@ final class SupplierExtractionReviewTarget {
 final class SupplierExtractionReviewIssue {
   SupplierExtractionReviewIssue._({
     required this.id,
+    required this.structureBasis,
     required this.snapshotOrder,
     required this.code,
     required this.severity,
@@ -102,8 +103,20 @@ final class SupplierExtractionReviewIssue {
       'target',
       'resolutionRequired',
       'sources',
+      if (data.containsKey('structureBasis')) 'structureBasis',
     }, 'Stored review issue');
+    final basis = value['structureBasis'];
+    if (value.containsKey('structureBasis') &&
+        (!{'absence_only', 'explicit_relationship'}.contains(basis) ||
+            !{
+              'chronology_unknown',
+              'global_mapping_required',
+              'accommodation_span_unknown',
+            }.contains(value['code']))) {
+      throw const FormatException('Invalid review structure evidence.');
+    }
     return SupplierExtractionReviewIssue._(
+      structureBasis: basis as String?,
       id: SupplierExtractionParsing.id(value['id'], 'Review issue'),
       snapshotOrder: snapshotOrder,
       code: SupplierExtractionParsing.enumValue(
@@ -137,6 +150,7 @@ final class SupplierExtractionReviewIssue {
   }
 
   final String id;
+  final String? structureBasis;
   final int snapshotOrder;
   final SupplierExtractionReviewCode code;
   final SupplierExtractionReviewSeverity severity;

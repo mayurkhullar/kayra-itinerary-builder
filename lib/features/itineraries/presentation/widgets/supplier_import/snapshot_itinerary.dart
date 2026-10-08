@@ -110,9 +110,9 @@ class SnapshotItinerary extends StatelessWidget {
         if (unassigned.isNotEmpty)
           ReviewSection(
             key: const ValueKey('review-unassigned'),
-            title: 'Needs day assignment',
+            title: 'Unscheduled services',
             subtitle:
-                'The source does not provide enough safe chronology to place these services into days.',
+                'Services without a supplied day. Scheduling is optional.',
             child: ReviewPanel(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,

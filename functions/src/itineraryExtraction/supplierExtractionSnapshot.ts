@@ -216,7 +216,11 @@ export type StagedReviewTarget =
   Readonly<{kind: "package_fact"; entityId: string}> |
   Readonly<{kind: "ancillary_fact"; entityId: string}>;
 
+export type ReviewStructureBasis = "absence_only" | "explicit_relationship";
 export interface StagedReviewIssue {
+  /** Optional extracted evidence, validated and normalized by the backend.
+   * Missing means unknown, never absence-only. No prose-based inference. */
+  structureBasis?: ReviewStructureBasis;
   id: string;
   code: StagedReviewCode;
   severity: StagedReviewSeverity;

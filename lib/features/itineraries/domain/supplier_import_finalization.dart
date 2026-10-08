@@ -9,13 +9,16 @@ final class SupplierImportFinalizationRequest {
     required String extractionId,
     required String commandId,
     required this.expectedRevision,
-    this.policyVersion = itineraryDraftV2ImportPolicy,
+    this.policyVersion = optionalChronologyImportPolicy,
   }) : tripId = _id(tripId, maximum: 256),
        extractionId = _id(extractionId, maximum: 256),
        commandId = _id(commandId, maximum: 128) {
     if (expectedRevision < 1 ||
         expectedRevision >= 9007199254740991 ||
-        policyVersion != itineraryDraftV2ImportPolicy) {
+        !{
+          itineraryDraftV2ImportPolicy,
+          optionalChronologyImportPolicy,
+        }.contains(policyVersion)) {
       throw const FormatException("Invalid finalization request.");
     }
   }

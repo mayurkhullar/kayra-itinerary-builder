@@ -1,4 +1,4 @@
-import type {ItineraryDraftV2, itineraryDraftV2ImportPolicy} from "./itineraryDraftV2";
+import type {ItineraryDraftV2, ItineraryDraftImportPolicy} from "./itineraryDraftV2";
 import type {PackageServiceDestination} from "./supplierImportResolution";
 import type {SupplierExtractionFact, TrustedSnapshotSourceReference} from "./supplierExtractionSnapshot";
 
@@ -63,7 +63,7 @@ export interface SupplierImportV2AssemblyContext {
   readonly finalizationId: string;
   readonly createdAt: string;
   readonly updatedAt: string;
-  readonly policyVersion: typeof itineraryDraftV2ImportPolicy;
+  readonly policyVersion: ItineraryDraftImportPolicy;
 }
 
 export type ImportAccountingOutcome = "auto_retained" | "explicit_retained" |

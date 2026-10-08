@@ -5,7 +5,11 @@ import type {
 import type {ItineraryDraftPackageContent} from "./itineraryDraftPackageContent";
 
 export const itineraryDraftV2SchemaVersion = "itinerary_draft_v2" as const;
+// Historical policy is retained verbatim for sealed-import replay.
 export const itineraryDraftV2ImportPolicy = "supplier_import_exception_review_v1" as const;
+export const optionalChronologyImportPolicy = "supplier_import_optional_chronology_v2" as const;
+export const itineraryDraftImportPolicies = [itineraryDraftV2ImportPolicy, optionalChronologyImportPolicy] as const;
+export type ItineraryDraftImportPolicy = typeof itineraryDraftImportPolicies[number];
 
 // Dates retain the existing canonical timeline semantics. The validator exposes
 // defensive Date copies through getters, since Object.freeze(Date) alone does
@@ -37,7 +41,7 @@ export interface ItineraryDraftImportResult {
   readonly evaluatedRevision: number;
   readonly sourcePackageId: string;
   readonly finalizationId: string;
-  readonly policyVersion: typeof itineraryDraftV2ImportPolicy;
+  readonly policyVersion: ItineraryDraftImportPolicy;
 }
 
 export interface ItineraryDraftV2 {
@@ -47,6 +51,8 @@ export interface ItineraryDraftV2 {
   readonly schemaVersion: typeof itineraryDraftV2SchemaVersion;
   readonly title: string;
   readonly days: readonly ItineraryDraftV2Day[];
+  /** Display order only. Absence is preserved for historical maps/digests. */
+  readonly unscheduledServices?: readonly ImmutableDraftValue<ItineraryDraftV2Service>[];
   readonly sourcePackageIds: readonly string[];
   readonly reviewIssues: readonly Readonly<ValidatedReviewIssue>[];
   readonly createdByUid: string;

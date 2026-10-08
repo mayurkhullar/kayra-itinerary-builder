@@ -82,6 +82,7 @@ ItineraryDraftV2 finalizationDraft({
   m['sourcePackageIds'] = [packageId];
   (m['importResult'] as Map<String, dynamic>).addAll({
     'evaluatedRevision': evaluatedRevision,
+    'policyVersion': optionalChronologyImportPolicy,
     'finalizationId': commandId,
     'extractionId': extractionId,
     'resolutionId': extractionId,

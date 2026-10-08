@@ -49,6 +49,12 @@ Core rules:
 13. Create concise reviewIssues for genuine ambiguity. Use one-based provider
     array positions in targets. Use blocker only when the ambiguity prevents
     safe mapping or itinerary use; otherwise use warning.
+    For chronology_unknown, global_mapping_required or accommodation_span_unknown,
+    optionally supply structureBasis: absence_only ONLY when the issue is solely
+    an unstated chronology/span/mapping and no explicit source relationship needs
+    resolving. Use explicit_relationship for ambiguous/conflicting source claims.
+    Omit it if uncertain. Never label a conflict as absence_only. Missing chronology
+    alone need not create an issue: valid unscheduled services are proposal content.
 14. Do not infer from general travel knowledge, destination knowledge, Trip
     metadata, adjacent facts, or normal-world expectations.
 

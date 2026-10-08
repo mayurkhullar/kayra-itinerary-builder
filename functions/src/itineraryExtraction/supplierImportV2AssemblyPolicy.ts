@@ -25,7 +25,7 @@ import {
  * assembleSupplierImportV2 evaluator, including canonical validation. */
 export function findAssemblyStructureIssues(
   snapshot: SupplierExtractionSnapshot,
-  resolution: SupplierImportResolutionAggregate,
+  resolution: SupplierImportResolutionAggregate, optionalChronology = false,
 ): Pick<SupplierImportFinalizationAssessment, "blockers" | "informational"> {
   const blockers: FinalizationFinding<FinalizationBlockerCode>[] = [];
   const informational: FinalizationFinding<FinalizationInformationalCode>[] = [];
@@ -48,7 +48,7 @@ export function findAssemblyStructureIssues(
 
   assessDays(snapshot, decisions, manualDays, blockers);
   assessServices(
-    snapshot, decisions, manualServices, retainedDayIds, blockers,
+    snapshot, decisions, manualServices, retainedDayIds, blockers, optionalChronology,
   );
   assessPackageFacts(snapshot, decisions, retainedDayIds, blockers);
   assessAncillaryFacts(snapshot, decisions, blockers);
@@ -96,7 +96,7 @@ function assessServices(
   decisions: Map<string, SupplierImportDecision>,
   manualServices: readonly ConsultantService[],
   retainedDayIds: ReadonlySet<string>,
-  blockers: FinalizationFinding<FinalizationBlockerCode>[],
+  blockers: FinalizationFinding<FinalizationBlockerCode>[], optionalChronology: boolean,
 ): void {
   const orders = new Map<string, Map<number, string>>();
   const services = snapshot.facts.filter(
@@ -107,6 +107,10 @@ function assessServices(
     const decision = candidate?.decisionKind === "service" ? candidate : undefined;
     if (decision?.disposition === "exclude") continue;
     const day = effectiveServiceDay(service, decision);
+    if (optionalChronology && service.scope.kind === "unassigned" && decision?.day === undefined) {
+      assessServiceContent(service, decision, blockers);
+      continue;
+    }
     if (service.scope.kind === "unassigned" && decision === undefined) {
       add(blockers, "unresolved_unassigned_service", "service", service.id);
       continue;

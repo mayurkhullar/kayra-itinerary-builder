@@ -10,16 +10,16 @@ export function assessAssemblyReview(
   snapshot: SupplierExtractionSnapshot, resolution: SupplierImportResolutionAggregate,
   blockers: FinalizationFinding<FinalizationBlockerCode>[], warnings: FinalizationFinding<FinalizationWarningCode>[],
   accounting: SupplierImportAccounting[],
-  representationSafe = false,
+  representationSafe = false, optionalChronology = false,
 ): object[] {
   const decisions = new Map(resolution.decisions.map((decision) => [decision.decisionId, decision]));
   const specificsClear = snapshot.reviewIssues.filter((i) => i.target.kind !== "snapshot").every((i) =>
-    evaluateReviewIssue(i, snapshot, resolution, representationSafe, true) !== "unresolved");
+    evaluateReviewIssue(i, snapshot, resolution, representationSafe, true, optionalChronology) !== "unresolved");
   const remaining: object[] = [];
   for (const issue of snapshot.reviewIssues) {
     const value = decisions.get(issue.id);
     const decision = value?.decisionKind === "review_issue" ? value : undefined;
-    const evaluation = evaluateReviewIssue(issue, snapshot, resolution, representationSafe, specificsClear);
+    const evaluation = evaluateReviewIssue(issue, snapshot, resolution, representationSafe, specificsClear, optionalChronology);
     const blocking = evaluation === "unresolved";
     const resolved = evaluation === "derived" || evaluation === "explicit";
     const overridden = evaluation === "overridden";

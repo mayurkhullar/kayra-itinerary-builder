@@ -141,8 +141,10 @@ Under the planned `supplier_import_exception_review_v1` policy, safe untouched
 facts carry through only after trusted Snapshot/provenance validation, lossless
 canonical representation, valid scope/references and review-issue checks. An
 explicit exclusion wins; sparse set/clear corrections change only those values.
-Unassigned services still require a real assignment or exclusion. Structural
-issues and resolution-required warnings cannot be bypassed by default retention.
+Under the new `supplier_import_optional_chronology_v2` finalization policy, safe
+unassigned services automatically remain unscheduled. They require neither a
+retain decision nor assignment. Genuine conflicts and invalid/lossy content still
+block; absence of day-wise chronology alone does not.
 Optional non-structural warnings may remain open without acknowledgement.
 
 The selected future canonical `itinerary_draft_v2` root has first-class package
@@ -158,6 +160,28 @@ unchanged. The precise safety gates, lineage, versioning, size limits and atomic
 finalization are defined in
 [`SUPPLIER_EXTRACTION_STAGING_MODEL.md`, section 25](SUPPLIER_EXTRACTION_STAGING_MODEL.md#25-canonical-package-content-and-exception-driven-finalization)
 and [`ITINERARY_DRAFT_MODEL.md`](ITINERARY_DRAFT_MODEL.md#canonical-v2-architecture).
+
+### Optional chronology for quotations and proposals
+
+Day-wise itinerary is **optional** at quotation/proposal stage. Zero days with
+valid unscheduled services, package-only content, scheduled-only content and all
+mixed combinations are supported by the local Supplier Import architecture.
+Source chronology is preserved when explicitly supplied; no Day 1, date, order
+or stay is manufactured to satisfy a schema. The optional canonical V2 root
+`unscheduledServices` collection uses the full existing service shape and display
+order only. Package facts remain distinct; flights/visa retain ancillary handling.
+
+Structured absence-only review evidence can remove a placement-only exception;
+explicit relationship conflicts and ambiguous historical issues remain protected.
+No extra AI/preflight call or pricing generation is added. Pricing remains separate
+and agent-controlled at the later download/share boundary, including adult/child/
+infant amounts where applicable. Later operational day planning may be useful after
+confirmation but is never a quotation prerequisite. Published proposal revisions
+remain immutable/versioned; later scheduling belongs to an operational layer or
+deliberate proposal revision, never a silent rewrite.
+
+Production extraction remains **V2.4-only**. This implementation does not deploy
+anything or declare V3 production-ready.
 
 ## Supplier Source Inputs and Canonical Ingestion
 

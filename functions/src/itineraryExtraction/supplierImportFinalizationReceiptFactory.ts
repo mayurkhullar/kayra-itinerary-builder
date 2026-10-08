@@ -1,4 +1,4 @@
-import {itineraryDraftV2ImportPolicy, ItineraryDraftV2} from "./itineraryDraftV2";
+import {itineraryDraftImportPolicies, ItineraryDraftV2} from "./itineraryDraftV2";
 import {itineraryDraftV2ToMap, validateItineraryDraftV2} from "./itineraryDraftV2Validation";
 import {array, enumValue, exact, identity, positiveInteger, sourceLabel, timestamp, unique} from "./itineraryDraftValidationPrimitives";
 import {
@@ -24,7 +24,7 @@ export function createSupplierImportFinalizationReceipt(
     const trusted = {
       tripId: identity(context.tripId, "Trip"), extractionId: identity(context.extractionId, "Extraction"),
       commandId: boundedIdentity(context.commandId), expectedRevision: positiveInteger(context.expectedRevision, "Revision"),
-      policyVersion: enumValue(context.policyVersion, [itineraryDraftV2ImportPolicy], "Policy"), actorUid: boundedIdentity(context.actorUid),
+      policyVersion: enumValue(context.policyVersion, itineraryDraftImportPolicies, "Policy"), actorUid: boundedIdentity(context.actorUid),
     };
     const finalizedAt = timestamp(dateMap(context.finalizedAt), "Finalized at");
     const candidate = validateItineraryDraftV2(assembly.candidate.id, itineraryDraftV2ToMap(assembly.candidate));
@@ -120,7 +120,7 @@ export function assertSupplierImportReceiptMatchesCandidate(receipt: SupplierImp
       checkContributorIdentity(entry, candidate);
       for (const output of entry.outputTargets) {
         if (output.kind !== "service" || output.field === "entity") continue;
-        const service = candidate.days.flatMap((day) => day.services).find((value) => value.id === output.id);
+        const service = [...candidate.days.flatMap((day) => day.services), ...(candidate.unscheduledServices ?? [])].find((value) => value.id === output.id);
         if (!service || output.field === "inclusions" && service.inclusions.length === 0 ||
             output.field === "exclusions" && service.exclusions.length === 0 || output.field === "notes" && service.notes === null ||
             output.field === "transferDetails.vehicleType" && service.transferDetails?.vehicleType == null ||
@@ -137,6 +137,7 @@ function outputIndex(candidate: ItineraryDraftV2): ReceiptOutputTarget[] {
       {kind: "day", dayNumber: day.dayNumber, field: "entity"},
       ...day.services.map((service) => ({kind: "service" as const, id: service.id, field: "entity" as const})),
     ]),
+    ...(candidate.unscheduledServices ?? []).map((service): ReceiptOutputTarget => ({kind: "service", id: service.id, field: "entity"})),
     ...candidate.packageContent.accommodations.flatMap((row): ReceiptOutputTarget[] => [
       {kind: "package_accommodation", id: row.id, field: "entity"},
       ...row.options.map((option) => ({kind: "accommodation_option" as const, id: option.id, field: "entity" as const})),

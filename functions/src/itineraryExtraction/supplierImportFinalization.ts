@@ -1,5 +1,5 @@
 import {createHash} from "node:crypto";
-import {itineraryDraftV2ImportPolicy} from "./itineraryDraftV2";
+import {ItineraryDraftImportPolicy, itineraryDraftImportPolicies} from "./itineraryDraftV2";
 import {enumValue, exact, identity, immutable, positiveInteger} from "./itineraryDraftValidationPrimitives";
 import {supplierImportResolutionPaths} from "./supplierImportResolutionRepository";
 import type {SupplierImportFinalizationAssessment} from "./supplierImportV2AssemblyTypes";
@@ -12,7 +12,7 @@ export interface SupplierImportFinalizationRequest {
   readonly extractionId: string;
   readonly commandId: string;
   readonly expectedRevision: number;
-  readonly policyVersion: typeof itineraryDraftV2ImportPolicy;
+  readonly policyVersion: ItineraryDraftImportPolicy;
 }
 
 export type FinalizationCapacityBoundary = "canonical" | "package_content" | "receipt" |
@@ -47,7 +47,7 @@ export function validateFinalizationRequest(input: unknown): SupplierImportFinal
     const expectedRevision = positiveInteger(data.expectedRevision, "Revision");
     if (!Number.isSafeInteger(expectedRevision + 1)) throw new Error();
     return immutable({tripId, extractionId, commandId, expectedRevision,
-      policyVersion: enumValue(data.policyVersion, [itineraryDraftV2ImportPolicy], "Policy")});
+      policyVersion: enumValue(data.policyVersion, itineraryDraftImportPolicies, "Policy")});
   } catch { throw new SupplierImportFinalizationError("INVALID_FINALIZATION_REQUEST"); }
 }
 

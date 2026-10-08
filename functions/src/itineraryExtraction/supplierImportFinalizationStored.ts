@@ -43,19 +43,23 @@ export function readStoredFinalizationReceipt(input: unknown): SupplierImportFin
 
 function transformDraftDates(input: unknown, convert: (value: unknown, dateOnly: boolean) => unknown): Record<string, unknown> {
   const map = plainMap(input);
-  return {...map, createdAt: convert(map.createdAt, false), updatedAt: convert(map.updatedAt, false),
+  const serviceDates = (item: unknown): Record<string, unknown> => {
+    const service = plainMap(item);
+    if (service.hotelDetails === null) return service;
+    const hotel = plainMap(service.hotelDetails);
+    return {...service, hotelDetails: {...hotel,
+      checkInDate: hotel.checkInDate === null ? null : convert(hotel.checkInDate, true),
+      checkOutDate: hotel.checkOutDate === null ? null : convert(hotel.checkOutDate, true),
+    }};
+  };
+  return {...map,
+    ...(Object.prototype.hasOwnProperty.call(map, "unscheduledServices") ? {
+      unscheduledServices: array(map.unscheduledServices, "Stored unscheduled services").map(serviceDates),
+    } : {}), createdAt: convert(map.createdAt, false), updatedAt: convert(map.updatedAt, false),
     days: array(map.days, "Stored days").map((value) => {
       const day = plainMap(value);
       return {...day, date: day.date === null ? null : convert(day.date, true),
-        services: array(day.services, "Stored services").map((item) => {
-          const service = plainMap(item);
-          if (service.hotelDetails === null) return service;
-          const hotel = plainMap(service.hotelDetails);
-          return {...service, hotelDetails: {...hotel,
-            checkInDate: hotel.checkInDate === null ? null : convert(hotel.checkInDate, true),
-            checkOutDate: hotel.checkOutDate === null ? null : convert(hotel.checkOutDate, true),
-          }};
-        }),
+        services: array(day.services, "Stored services").map(serviceDates),
       };
     }),
   };

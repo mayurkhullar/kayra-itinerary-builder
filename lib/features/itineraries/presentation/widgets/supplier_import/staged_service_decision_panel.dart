@@ -57,11 +57,7 @@ class StagedServiceDecisionPanel extends StatelessWidget {
                 child: OutlinedButton(
                   key: ValueKey('service-review-action-${service.id}'),
                   onPressed: onReview,
-                  child: Text(
-                    review.sourceDayId(service) == null && decision == null
-                        ? 'Assign or exclude'
-                        : 'Review service',
-                  ),
+                  child: Text('Review service'),
                 ),
               ),
             ),

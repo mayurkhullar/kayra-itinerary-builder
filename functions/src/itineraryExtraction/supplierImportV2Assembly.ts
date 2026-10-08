@@ -2,7 +2,7 @@ import type {SupplierExtractionSnapshot} from "./supplierExtractionSnapshot";
 import type {SupplierImportResolutionAggregate} from "./supplierImportResolution";
 import {parseSupplierExtractionSnapshotStructure} from "./supplierExtractionStoredValidation";
 import {validateSupplierImportResolution} from "./supplierImportResolutionValidation";
-import {itineraryDraftV2ImportPolicy, itineraryDraftV2SchemaVersion} from "./itineraryDraftV2";
+import {itineraryDraftImportPolicies, itineraryDraftV2SchemaVersion, optionalChronologyImportPolicy} from "./itineraryDraftV2";
 import {validateItineraryDraftV2} from "./itineraryDraftV2Validation";
 import {enumValue, exact, identity, immutable, timestamp} from "./itineraryDraftValidationPrimitives";
 import {findAssemblyStructureIssues} from "./supplierImportV2AssemblyPolicy";
@@ -70,18 +70,22 @@ export function assembleSupplierImportV2(
     sourcePackageId: snapshot.sourcePackageId, finalizationId: context.finalizationId,
     policyVersion: context.policyVersion,
   };
-  const structure = findAssemblyStructureIssues(snapshot, resolution);
+  const optionalChronology = context.policyVersion === optionalChronologyImportPolicy;
+  const structure = findAssemblyStructureIssues(snapshot, resolution, optionalChronology);
   blockers.push(...structure.blockers);
   informational.push(...structure.informational);
-  const timeline = buildTimeline(snapshot, resolution, accounting);
-  const packageContent = buildPackageContent(snapshot, resolution, importResult, timeline, accounting, blockers);
+  const timeline = buildTimeline(snapshot, resolution, accounting, optionalChronology);
+  const packageContent = buildPackageContent(snapshot, resolution, importResult, timeline, accounting, blockers, optionalChronology);
+  const unscheduled = optionalChronology && [...timeline.services.values()].some((s) => s.dayId === null) ?
+    {unscheduledServices: [...timeline.services.values()].filter((s) => s.dayId === null)
+      .sort((a, b) => a.order - b.order || a.entityId.localeCompare(b.entityId)).map((s) => s.data)} : {};
   const titleDecision = resolution.decisions.find((decision) => decision.decisionKind === "title");
   const title = titleDecision?.overrides.title?.value ?? snapshot.title.text;
   let representationSafe = blockers.length === 0;
   if (representationSafe) {
     try {
       validateItineraryDraftV2(context.draftId, {tripId: context.tripId,
-        schemaVersion: itineraryDraftV2SchemaVersion, title, days: timelineMap(timeline),
+        schemaVersion: itineraryDraftV2SchemaVersion, title, days: timelineMap(timeline), ...unscheduled,
         sourcePackageIds: [snapshot.sourcePackageId], reviewIssues: [], createdByUid: context.actorUid,
         createdAt: context.createdAt, updatedAt: context.updatedAt, packageContent, importResult});
     } catch {
@@ -89,7 +93,7 @@ export function assembleSupplierImportV2(
       blockers.push({code: "canonical_validation_failed", targetKind: "resolution", targetId: resolutionId});
     }
   }
-  const reviewIssues = assessAssemblyReview(snapshot, resolution, blockers, warnings, accounting, representationSafe);
+  const reviewIssues = assessAssemblyReview(snapshot, resolution, blockers, warnings, accounting, representationSafe, optionalChronology);
   account(accounting, "title", "title", snapshot.title.sources, titleDecision,
     titleDecision ? "explicit_retained" : "auto_retained", [context.draftId]);
   for (const fact of snapshot.facts) {
@@ -115,7 +119,7 @@ export function assembleSupplierImportV2(
   try {
     const candidate = validateItineraryDraftV2(context.draftId, {
       tripId: context.tripId, schemaVersion: itineraryDraftV2SchemaVersion, title,
-      days: timelineMap(timeline), sourcePackageIds: [snapshot.sourcePackageId], reviewIssues,
+      days: timelineMap(timeline), ...unscheduled, sourcePackageIds: [snapshot.sourcePackageId], reviewIssues,
       createdByUid: context.actorUid, createdAt: context.createdAt, updatedAt: context.updatedAt,
       packageContent, importResult,
     });
@@ -141,7 +145,7 @@ function validateContext(context: SupplierImportV2AssemblyContext, snapshot: Sup
       timestamp(context.updatedAt, "Updated at") < timestamp(context.createdAt, "Created at")) {
     throw new Error("Invalid trusted assembly context.");
   }
-  enumValue(context.policyVersion, [itineraryDraftV2ImportPolicy], "Policy");
+  enumValue(context.policyVersion, itineraryDraftImportPolicies, "Policy");
 }
 
 function sorted<Code extends string>(findings: readonly FinalizationFinding<Code>[]): FinalizationFinding<Code>[] {

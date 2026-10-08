@@ -24,13 +24,13 @@ export function parseTimeline(
     return {
       dayNumber, date: timelineDate(data.date, "Day date"),
       title: text(data.title, "Day title"), summary: optionalTimelineText(data.summary, "Day summary"),
-      services: array(data.services, "Services").map((item) => service(item, packageIds)),
+      services: array(data.services, "Services").map((item) => parseV2Service(item, packageIds)),
       notes: optionalTimelineText(data.notes, "Day notes"),
     };
   });
 }
 
-function service(input: unknown, packageIds: readonly string[]): ItineraryDraftV2Service {
+export function parseV2Service(input: unknown, packageIds: readonly string[]): ItineraryDraftV2Service {
   const data = exactOptional(input, [
     "id", "type", "title", "description", "startTime", "endTime", "location", "city",
     "inclusions", "exclusions", "notes", "hotelDetails", "transferDetails", "activityDetails", "sourceReference",

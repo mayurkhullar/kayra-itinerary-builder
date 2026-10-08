@@ -387,13 +387,14 @@ export const kayraSupplierExtractionV3ResponseSchema = {
           message: {type: "string"},
           target: {$ref: "#/$defs/reviewTarget"},
           resolutionRequired: {type: "boolean"},
+          structureBasis: {type: "string", enum: ["absence_only", "explicit_relationship"]},
           sources: sourceLocators,
         },
         required: [
           "code", "severity", "message", "target", "resolutionRequired",
         ],
         propertyOrdering: [
-          "code", "severity", "message", "target", "resolutionRequired", "sources",
+          "code", "severity", "message", "target", "resolutionRequired", "structureBasis", "sources",
         ],
       },
     },

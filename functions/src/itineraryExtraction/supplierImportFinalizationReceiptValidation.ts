@@ -1,4 +1,4 @@
-import {itineraryDraftV2ImportPolicy, itineraryDraftV2SchemaVersion} from "./itineraryDraftV2";
+import {itineraryDraftImportPolicies, itineraryDraftV2SchemaVersion} from "./itineraryDraftV2";
 import {array, enumValue, exact, identity, immutable, positiveInteger, timestamp, unique} from "./itineraryDraftValidationPrimitives";
 import {
   maxReceiptDecisionsAndManualItems, maxReceiptSnapshotEntities, receiptOperationFields,
@@ -31,7 +31,7 @@ export function supplierImportFinalizationReceiptFromMap(input: unknown): Suppli
     const finalizedAt = timestamp(data.finalizedAt, "Finalized at");
     const evaluatedRevision = positiveInteger(data.evaluatedRevision, "Evaluated revision");
     const resultingRevision = positiveInteger(data.resultingRevision, "Resulting revision");
-    const policyVersion = enumValue(data.policyVersion, [itineraryDraftV2ImportPolicy], "Policy");
+    const policyVersion = enumValue(data.policyVersion, itineraryDraftImportPolicies, "Policy");
     const canonicalSchemaVersion = enumValue(data.canonicalSchemaVersion, [itineraryDraftV2SchemaVersion], "Canonical schema");
     const resultingDraftId = identity(data.resultingDraftId, "Draft");
     const requestFingerprint = digest(data.requestFingerprint);

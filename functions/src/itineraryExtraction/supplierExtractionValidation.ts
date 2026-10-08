@@ -1,3 +1,4 @@
+import {reviewStructureFields} from "./supplierExtractionReviewStructure";
 import {
   AncillaryFlightFact,
   AncillaryVisaFact,
@@ -147,6 +148,7 @@ const visaFields = ["disposition", "text", "sources"] as const;
 const commercialFields = ["present", "categories", "sources"] as const;
 const sourceFields = ["fileIndex", "sourceLabel"] as const;
 const reviewFields = [
+  "structureBasis",
   "code", "severity", "message", "target", "resolutionRequired", "sources",
 ] as const;
 
@@ -963,7 +965,7 @@ function normalizeReviewIssue(
     "Review issue",
   );
   return {
-    id,
+    id, ...reviewStructureFields(data, invalid),
     code: enumValue(data.code, reviewCodes, "review code"),
     severity: enumValue(data.severity, reviewSeverities, "review severity"),
     message: requiredSemanticText(data.message, "Review message"),

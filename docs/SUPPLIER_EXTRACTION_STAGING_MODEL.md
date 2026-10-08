@@ -1,5 +1,76 @@
 # Supplier extraction staging model
 
+## Optional proposal chronology — implemented policy extension
+
+Day-wise itinerary is OPTIONAL for quotation/proposal finalization. The local
+new policy is `supplier_import_optional_chronology_v2`; historical
+`supplier_import_exception_review_v1` remains supported with its unchanged
+assembly/review behavior for replay. Flutter defaults new finalization intents
+to the new policy and validates either policy on stored results. No historical
+receipt, finalized Resolution or canonical document is migrated. The compatibility
+assessment without explicit context retains its legacy policy; new finalization
+always supplies its explicit policy. Existing finalization requests remain a
+closed five-field contract, without a new callable or preflight.
+
+Canonical `itinerary_draft_v2` adds only optional
+`unscheduledServices: ItineraryDraftV2Service[]`. Absent stays absent during map
+serialization; explicit `[]` remains explicit. Both placements use the exact same
+service validator, typed details, service conditions and commercial boundary.
+Identity is unique across the entire draft, including both service collections.
+Display order comes from effective source/explicit order with stable identity as
+tie-breaker; it is not chronology. The assembler omits the new field if empty.
+Zero-day services, zero-day package content, scheduled-only and mixed proposals
+are valid subject to substantive safety/capacity gates.
+
+Safe retained unassigned services auto-carry without acceptance writes. Source-day
+services keep their chronology. Explicit scheduling selects one retained day and
+order and consumes the service once; exclusion wins and emits no service.
+Excluded-source-day dependencies still fail, never implicitly unschedule.
+Sparse corrections work without assignment, and compatible explicit package-to-
+service maps can target unscheduled services without weakening losslessness.
+Package content remains distinct; flights/visa remain ancillary and need their
+existing explicit disposition. Unsupported structured service facts still block.
+
+Review issues optionally carry `structureBasis: absence_only | explicit_relationship`
+only for `chronology_unknown`, `global_mapping_required`, or
+`accommodation_span_unknown`. The isolated staging provider can supply this
+structured evidence; backend normalization and stored readers validate the closed
+vocabulary and eligible code, resolve targets/provenance through trusted context,
+and never infer it from message text. Historical missing evidence remains unknown.
+The new policy waives an absence-only placement/span issue only with a valid,
+lossless representation and a compatible target: unscheduled source services,
+package-scoped facts, or a wholly compatible zero-day snapshot. Source-assigned
+chronology and explicit relationships are not waived; missing hotel span evidence
+must not contradict explicit hotel dates/nights. Unresolved classification, dates,
+source conflicts and `other` remain exceptions. Optional warnings need no click.
+This is evidence from extraction, not a guarantee of perfect source interpretation;
+consultants retain correction/exclusion and source inspection.
+
+Existing service IDs and supplier origin survive unscheduled placement, correction
+and scheduling. The receipt reuses service-ID output targets and indexes both
+collections, including mapped fields, without fake day targets or copied prose.
+The canonical digest includes the optional field only when present. Old-policy
+assembly and byte ordering remain unchanged; exact retry reconstructs its original
+policy. Hotel date/Timestamp conversion traverses both service collections.
+Canonical, receipt, input/entity and combined-write budgets include unscheduled
+content; the package-only record budget does not. No truncation or chunking.
+
+Flutter exposes days, unscheduled services and package content independently and
+immutably. Review uses neutral unscheduled wording, supports editing without a day,
+and offers existing optional scheduling/exclusion. No manual-day UI or premium
+proposal renderer is added. Future sanitized reuse must include non-commercial
+unscheduled content while stripping private supplier/client/provenance data into
+an independent copy. This does not implement reuse.
+
+Published proposal revisions remain immutable/versioned. Later confirmed-trip
+operational scheduling should be separate or create a deliberate proposal revision;
+it must never silently rewrite the published proposal. No operations code, pricing
+fields/generation or additional AI calls are added. Production extraction remains
+**V2.4-only** and V3 is not declared production-ready. Earlier assignment-mandatory
+policy descriptions apply only to historical v1-policy finalization where not
+explicitly superseded here.
+
+
 ### Deterministic commercial-value boundary
 
 Trusted V3 normalization, stored Snapshot reads, Resolution corrections/manual
@@ -804,10 +875,10 @@ finalization behavior.
 | Detailed day-by-day PDF | All explicit days/dates/services remain assigned; V2.4 semantics and page provenance survive. |
 | Narrative PDF | Explicit days remain assigned; global hotel/package statements stay global; narrative boilerplate is excluded. |
 | Table-heavy email | Day/date rows become staged days; separate hotel and inclusion tables retain their actual scope; prices become presence indicators only. |
-| Plain-text package without chronology | Tours remain separate unassigned services; package hotel, meals and conditions remain global; chronology review blockers are created. |
+| Plain-text package without chronology | Tours remain separate unassigned services; package hotel, meals and conditions remain global; absence of chronology alone does not require a blocker under the new policy. |
 | Screenshot/image source | Same semantic model as text/PDF, with page/section labels only when determinable. |
 | Global hotel facts | Hotel name, “or similar,” duration and meal facts remain one package accommodation without invented dates. |
-| Incomplete chronology | No arbitrary day distribution; every unassigned itinerary service requires resolution before finalization. |
+| Incomplete chronology | No arbitrary day distribution; only genuine explicit chronology conflicts require resolution before finalization. |
 | Pricing mixed with itinerary content | Operational inclusions/exclusions survive; amounts and commercial wording do not enter staging facts. |
 | Multi-file same-supplier package | Provider file indexes resolve through trusted file order; each fact maps to the correct file. |
 | Poor scanned document | Supported facts survive, unclear relationships become issues, and illegible content is not guessed. |
@@ -1054,8 +1125,9 @@ source order. A `retain` decision with no day or field override explicitly
 accepts that mapping. Supplying a day moves it to another retained staged or
 manual day. Supplying `canonicalOrder` changes its order within that day.
 
-An unassigned service is unresolved until a `retain` decision supplies a valid
-day and order, or an `exclude` decision supplies a controlled reason. Opening
+Under the historical v1 finalization policy, an unassigned service is unresolved
+until assigned with order or excluded. Under optional-chronology v2, a safe
+unassigned service auto-carries; assignment remains an optional explicit decision. Opening
 the review workspace never infers a day. Moving an assigned service and
 assigning an unassigned service preserve the original Snapshot fact and trusted
 provenance.
@@ -1646,7 +1718,7 @@ history and lineage.
 | Valid title, assigned day and assigned service, fully representable | Use extracted values. No mandatory explicit retain. This principle already exists for ordinary days/services in the assessment. |
 | Safe global/undated package accommodation | Include as package accommodation, without a fake day, date or booking guarantee. |
 | Safe package inclusion, exclusion or condition | Include in the matching package array, with all structured fields/provenance. |
-| Unassigned service | Explicit consultant assignment to a valid retained day, or explicit exclusion. Never assign automatically. |
+| Unassigned service | New optional-chronology policy: safe automatic unscheduled retention; explicit scheduling/exclusion remains available. Historical v1 still requires assignment/exclusion. |
 | Ambiguous hotel relationship/span, incompatible mapping, unsupported retained field | Concrete supported correction/disposition, or exclusion; otherwise block. |
 | Explicit exclusion | Omit content; audit the exclusion. Reassess dependent services/issues rather than automatically excluding them. |
 | Optional non-structural warning | May remain open, or be acknowledged voluntarily. No per-fact confirmation. |
@@ -1990,7 +2062,7 @@ future rollout acceptance must also verify client and publication behavior:
 
 - safe untouched package facts and assigned days/services finalize without
   per-fact decisions, preserving every field, count, ordering and provenance;
-- absent optional dates stay absent, unassigned services still block, and
+- absent optional dates stay absent, safe unscheduled services auto-carry under the new policy, and
   unsupported service fields/ambiguous relationships never disappear;
 - set/clear/exclude/map precedence, no duplicate mapped copy, real issue
   resolution and non-blocking optional warnings follow one policy;

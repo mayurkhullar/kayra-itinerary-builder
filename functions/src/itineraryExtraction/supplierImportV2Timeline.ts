@@ -8,7 +8,7 @@ import {
 
 export interface AssemblyService {
   entityId: string;
-  dayId: string;
+  dayId: string | null;
   order: number;
   data: Record<string, unknown>;
 }
@@ -26,7 +26,7 @@ export interface AssemblyTimeline {
  * mandatory in the shared evaluator. This never invents placement or details. */
 export function buildTimeline(
   snapshot: SupplierExtractionSnapshot, resolution: SupplierImportResolutionAggregate,
-  ledger: SupplierImportAccounting[],
+  ledger: SupplierImportAccounting[], optionalChronology = false,
 ): AssemblyTimeline {
   const decisions = new Map(resolution.decisions.map((decision) => [decision.targetEntityId, decision]));
   const days: AssemblyDay[] = [];
@@ -60,8 +60,8 @@ export function buildTimeline(
     if (excluded) continue;
     const destination = decision?.day ? dayId(decision.day) : source.scope.kind === "day" ? source.scope.dayId : null;
     const order = decision?.canonicalOrder ??
-      (source.scope.kind === "day" && decision?.day === undefined ? source.order : null);
-    if (destination === null || order === null) continue; // Policy reports the structural blocker.
+      (decision?.day === undefined && (source.scope.kind === "day" || optionalChronology) ? source.order : null);
+    if ((!optionalChronology && destination === null) || order === null) continue; // Policy reports the structural blocker.
     const overrides = decision?.overrides;
     const type = overrides?.serviceType?.value ?? source.serviceType;
     const data: Record<string, unknown> = {

@@ -7,6 +7,7 @@ final class ItineraryDraftV2ImportResult {
     this.evaluatedRevision,
     this.sourcePackageId,
     this.finalizationId,
+    this.policyVersion,
   );
   factory ItineraryDraftV2ImportResult._parse(Object? input) {
     final m = _V2.record(input, {
@@ -22,7 +23,10 @@ final class ItineraryDraftV2ImportResult {
     final finalization = _V2.id(m['finalizationId']);
     if (extraction != resolution ||
         finalization.length > 128 ||
-        m['policyVersion'] != itineraryDraftV2ImportPolicy) {
+        !{
+          itineraryDraftV2ImportPolicy,
+          optionalChronologyImportPolicy,
+        }.contains(m['policyVersion'])) {
       _V2.invalid();
     }
     return ItineraryDraftV2ImportResult._(
@@ -31,9 +35,10 @@ final class ItineraryDraftV2ImportResult {
       _V2.positive(m['evaluatedRevision']),
       _V2.id(m['sourcePackageId']),
       finalization,
+      m['policyVersion']! as String,
     );
   }
   final String extractionId, resolutionId, sourcePackageId, finalizationId;
   final int evaluatedRevision;
-  String get policyVersion => itineraryDraftV2ImportPolicy;
+  final String policyVersion;
 }

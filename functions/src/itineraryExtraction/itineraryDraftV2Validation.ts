@@ -1,9 +1,9 @@
 import {
   ItineraryDraftImportResult, ItineraryDraftV2,
-  itineraryDraftV2ImportPolicy, itineraryDraftV2SchemaVersion,
+  itineraryDraftImportPolicies, itineraryDraftV2SchemaVersion,
 } from "./itineraryDraftV2";
 import {parsePackageContent} from "./itineraryDraftPackageContentValidation";
-import {parseReviewIssues, parseTimeline} from "./itineraryDraftTimelineValidation";
+import {parseReviewIssues, parseTimeline, parseV2Service} from "./itineraryDraftTimelineValidation";
 import {
   array, enumValue, exact, identity, immutable, invalid, positiveInteger, text,
   timestamp, unique,
@@ -21,6 +21,7 @@ export function validateItineraryDraftV2(id: unknown, input: unknown): Itinerary
   const data = exact(input, [
     "tripId", "schemaVersion", "title", "days", "sourcePackageIds", "reviewIssues",
     "createdByUid", "createdAt", "updatedAt", "packageContent", "importResult",
+    ...(input && typeof input === "object" && Object.prototype.hasOwnProperty.call(input, "unscheduledServices") ? ["unscheduledServices"] : []),
   ], "Itinerary draft v2");
   const schemaVersion = enumValue(data.schemaVersion, [itineraryDraftV2SchemaVersion], "Draft version");
   const imported = importResult(data.importResult);
@@ -31,9 +32,11 @@ export function validateItineraryDraftV2(id: unknown, input: unknown): Itinerary
     invalid("Source packages must include the imported package.");
   }
   const days = parseTimeline(data.days, sourcePackageIds);
+  const unscheduled = Object.prototype.hasOwnProperty.call(data, "unscheduledServices") ?
+    {unscheduledServices: array(data.unscheduledServices, "Unscheduled services").map((value) => parseV2Service(value, sourcePackageIds))} : {};
   const reviewIssues = parseReviewIssues(data.reviewIssues);
   const packageContent = parsePackageContent(data.packageContent, imported);
-  const ids = [draftId, ...reviewIssues.map((issue) => issue.id)];
+  const ids = [draftId, ...(unscheduled.unscheduledServices ?? []).map((service) => service.id), ...reviewIssues.map((issue) => issue.id)];
   for (const day of days) ids.push(...day.services.map((service) => service.id));
   for (const accommodation of packageContent.accommodations) {
     ids.push(accommodation.id, ...accommodation.options.map((option) => option.id));
@@ -46,7 +49,7 @@ export function validateItineraryDraftV2(id: unknown, input: unknown): Itinerary
   if (updatedAt < createdAt) invalid("Updated time cannot precede creation time.");
   return immutable({
     id: draftId, tripId: identity(data.tripId, "Trip"), schemaVersion,
-    title: text(data.title, "Itinerary title"), days, sourcePackageIds, reviewIssues,
+    title: text(data.title, "Itinerary title"), days, ...unscheduled, sourcePackageIds, reviewIssues,
     createdByUid: identity(data.createdByUid, "Creator"), createdAt, updatedAt,
     packageContent, importResult: imported,
   });
@@ -65,7 +68,7 @@ function importResult(input: unknown): ItineraryDraftImportResult {
     extractionId, resolutionId,
     evaluatedRevision: positiveInteger(data.evaluatedRevision, "Evaluated revision"),
     sourcePackageId: identity(data.sourcePackageId, "Imported source package"), finalizationId,
-    policyVersion: enumValue(data.policyVersion, [itineraryDraftV2ImportPolicy], "Import policy"),
+    policyVersion: enumValue(data.policyVersion, itineraryDraftImportPolicies, "Import policy"),
   };
 }
 
@@ -87,15 +90,10 @@ function mapData(draft: ItineraryDraftV2): Record<string, unknown> {
   return {
     ...data,
     createdAt: timestampMap(draft.createdAt), updatedAt: timestampMap(draft.updatedAt),
+    ...(draft.unscheduledServices === undefined ? {} : {unscheduledServices: draft.unscheduledServices.map(serviceMap)}),
     days: draft.days.map((day) => ({
       ...day, date: dateMap(day.date),
-      services: day.services.map((service) => ({
-        ...service,
-        hotelDetails: service.hotelDetails === null ? null : {
-          ...service.hotelDetails, checkInDate: dateMap(service.hotelDetails.checkInDate),
-          checkOutDate: dateMap(service.hotelDetails.checkOutDate),
-        },
-      })),
+      services: day.services.map(serviceMap),
     })),
   };
 }
@@ -114,4 +112,11 @@ function dateMap(value: Date | null): string | null {
   const iso = timestampMap(value);
   if (!iso.endsWith("T00:00:00.000Z")) invalid("Timeline date must be UTC midnight.");
   return iso.slice(0, 10);
+}
+
+function serviceMap(service: ItineraryDraftV2["days"][number]["services"][number]): object {
+  return {...service, hotelDetails: service.hotelDetails === null ? null : {
+    ...service.hotelDetails, checkInDate: dateMap(service.hotelDetails.checkInDate),
+    checkOutDate: dateMap(service.hotelDetails.checkOutDate),
+  }};
 }

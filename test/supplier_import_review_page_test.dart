@@ -241,7 +241,8 @@ void main() {
     await show(tester);
     expect(inside('review-unassigned', 'Airport transfer'), findsOneWidget);
     expect(inside('review-itinerary', 'Airport transfer'), findsNothing);
-    expect(find.text('Needs day assignment'), findsOneWidget);
+    expect(find.text('Unscheduled services'), findsOneWidget);
+    expect(find.text('Needs day assignment'), findsNothing);
   });
 
   testWidgets(

@@ -1,3 +1,4 @@
+import {reviewStructureFields} from "./supplierExtractionReviewStructure";
 import {containsCommercialValue} from "./nonCommercialText";
 import {
   AncillaryFlightFact,
@@ -471,9 +472,10 @@ function parseCommercial(input: unknown): CommercialPresenceFact {
 function parseReviewIssue(input: unknown): StagedReviewIssue {
   const data = completeRecord(input, [
     "id", "code", "severity", "message", "target", "resolutionRequired",
-    "sources",
+    "sources", ...(input && typeof input === "object" && Object.prototype.hasOwnProperty.call(input, "structureBasis") ? ["structureBasis"] : []),
   ], "Stored review issue");
   return {
+    ...reviewStructureFields(data, invalid),
     id: identity(data.id, "Review issue"),
     code: enumValue(data.code, reviewCodes, "review code"),
     severity: enumValue(data.severity, reviewSeverities, "review severity"),

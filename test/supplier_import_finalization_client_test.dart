@@ -20,13 +20,13 @@ void main() {
         'extractionId': 'extraction-1',
         'commandId': 'intent-1',
         'expectedRevision': 2,
-        'policyVersion': 'supplier_import_exception_review_v1',
+        'policyVersion': 'supplier_import_optional_chronology_v2',
       });
       expect(
         File(
           'functions/src/itineraryExtraction/itineraryDraftV2.ts',
         ).readAsStringSync(),
-        contains('"$itineraryDraftV2ImportPolicy"'),
+        contains('"$optionalChronologyImportPolicy"'),
       );
       final body = finalizationRequest().toMap()..clear();
       expect(body, isEmpty);

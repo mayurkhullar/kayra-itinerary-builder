@@ -93,8 +93,7 @@ final class StagedServiceReviewData {
   bool canCorrect(SupplierExtractionServiceFact service) =>
       canReview &&
       decisionFor(service.id)?.disposition !=
-          SupplierImportRetainDisposition.exclude &&
-      effectiveDayFor(service) != null;
+          SupplierImportRetainDisposition.exclude;
 
   bool canCorrectField(
     SupplierExtractionServiceFact service,
@@ -145,7 +144,7 @@ final class StagedServiceReviewData {
     if (target == null ||
         target is SupplierImportStagedDayReference &&
             target.dayId == sourceId) {
-      if (sourceId == null) return 'Awaiting day assignment';
+      if (sourceId == null) return 'Unscheduled service';
       return decision.overrides.toMap().isEmpty &&
               (decision.canonicalOrder == null ||
                   decision.canonicalOrder == service.order)

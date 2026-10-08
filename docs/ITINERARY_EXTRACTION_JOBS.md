@@ -307,6 +307,17 @@ Future finalization creates a new canonical `itinerary_draft_v2` result and
 seals the Resolution; it does not overwrite an earlier draft or quotation.
 It does not reopen or advance the terminal extraction job.
 
+### Optional chronology finalization policy
+
+Local Supplier Import finalization now supports `supplier_import_optional_chronology_v2`
+with optional canonical V2 `unscheduledServices`. Historical
+`supplier_import_exception_review_v1` remains readable/replayable unchanged.
+Flutter selects the new policy for new finalization intents. This is separate
+from the extraction-job contract: production requests remain V2.4-only, no new
+AI/preflight call occurs, and no job/Snapshot is rewritten. V3 is not declared
+production-ready. See the draft/staging models for the structured absence-only
+review evidence and exact safe auto-carry boundary.
+
 ### Future canonical finalization policy
 
 The chosen canonical destination is one versioned draft root with embedded

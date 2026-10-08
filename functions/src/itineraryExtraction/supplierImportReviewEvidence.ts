@@ -19,7 +19,7 @@ export function permitsReviewOverride(issue: StagedReviewIssue): boolean {
 export function evaluateReviewIssue(
   issue: StagedReviewIssue, snapshot: SupplierExtractionSnapshot,
   resolution: SupplierImportResolutionAggregate, representationSafe: boolean,
-  specificIssuesClear: boolean,
+  specificIssuesClear: boolean, optionalChronology = false,
 ): "optional" | "unresolved" | "derived" | "explicit" | "overridden" {
   const explicit = resolution.decisions.find((d) => d.decisionKind === "review_issue" && d.targetEntityId === issue.id);
   const target = resolution.decisions.find((d) => d.targetEntityId === issue.target.entityId);
@@ -47,6 +47,7 @@ export function evaluateReviewIssue(
   if (explicit?.decisionKind === "review_issue" && explicit.outcome === "overridden" &&
       permitsReviewOverride(issue) && representationSafe &&
       (issue.target.kind !== "snapshot" || specificIssuesClear)) return "overridden";
+  if (optionalChronology && representationSafe && absenceOnlyRepresentable(issue, snapshot, resolution)) return "derived";
   return reviewBlocks(issue) ? "unresolved" : "optional";
 }
 
@@ -160,3 +161,33 @@ function decisionHasOverrides(decision: SupplierImportDecision): boolean {
   return Object.keys(decision.overrides).length > 0;
 }
 
+
+/** Structured absence can waive placement only; it never waives content validity,
+ * explicit source chronology, relationship ambiguity or ancillary routing. */
+function absenceOnlyRepresentable(issue: StagedReviewIssue, snapshot: SupplierExtractionSnapshot,
+  resolution: SupplierImportResolutionAggregate): boolean {
+  if (issue.structureBasis !== "absence_only") return false;
+  const safeFact = (id: string): boolean => {
+    const fact = snapshot.facts.find((f) => f.id === id);
+    if (!fact) return false;
+    const decision = resolution.decisions.find((d) => d.targetEntityId === id);
+    if (fact.factKind === "service") {
+      if (fact.scope.kind !== "unassigned" || decision?.decisionKind === "service" && decision.day !== undefined) return false;
+      if (issue.code === "accommodation_span_unknown") return fact.serviceType === "hotel" &&
+        fact.hotelDetails?.checkInDate == null && fact.hotelDetails?.checkOutDate == null && fact.hotelDetails?.nightCount == null;
+      return issue.code === "chronology_unknown" || issue.code === "global_mapping_required";
+    }
+    if (fact.factKind === "package_accommodation") {
+      if (decision?.decisionKind === "package_accommodation" && decision.disposition === "map_to_day_service") return false;
+      return issue.code === "global_mapping_required" || issue.code === "accommodation_span_unknown" &&
+        fact.details.checkInDate === null && fact.details.checkOutDate === null && fact.details.nightCount === null;
+    }
+    return issue.code === "global_mapping_required" &&
+      ["package_inclusion", "package_exclusion", "package_condition"].includes(fact.factKind);
+  };
+  if (issue.target.kind === "snapshot") {
+    const facts = snapshot.facts.filter((f) => f.factKind !== "commercial_presence");
+    return snapshot.days.length === 0 && facts.length > 0 && facts.every((f) => safeFact(f.id));
+  }
+  return issue.target.entityId !== null && safeFact(issue.target.entityId);
+}

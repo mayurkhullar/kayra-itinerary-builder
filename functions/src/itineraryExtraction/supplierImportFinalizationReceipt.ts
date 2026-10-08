@@ -1,4 +1,4 @@
-import type {ItineraryDraftV2, itineraryDraftV2ImportPolicy, itineraryDraftV2SchemaVersion} from "./itineraryDraftV2";
+import type {ItineraryDraftV2, ItineraryDraftImportPolicy, itineraryDraftV2SchemaVersion} from "./itineraryDraftV2";
 import type {ImportAccountingOutcome, SupplierImportAccounting} from "./supplierImportV2AssemblyTypes";
 import {immutable} from "./itineraryDraftValidationPrimitives";
 
@@ -68,7 +68,7 @@ export interface SupplierImportFinalizationReceipt {
   readonly finalizedAt: Date;
   readonly evaluatedRevision: number;
   readonly resultingRevision: number;
-  readonly policyVersion: typeof itineraryDraftV2ImportPolicy;
+  readonly policyVersion: ItineraryDraftImportPolicy;
   readonly canonicalSchemaVersion: typeof itineraryDraftV2SchemaVersion;
   readonly resultingDraftId: string;
   readonly requestFingerprint: string;
@@ -82,7 +82,7 @@ export interface SupplierImportFinalizationReceiptContext {
   readonly extractionId: string;
   readonly commandId: string;
   readonly expectedRevision: number;
-  readonly policyVersion: typeof itineraryDraftV2ImportPolicy;
+  readonly policyVersion: ItineraryDraftImportPolicy;
   readonly actorUid: string;
   readonly finalizedAt: Date;
 }

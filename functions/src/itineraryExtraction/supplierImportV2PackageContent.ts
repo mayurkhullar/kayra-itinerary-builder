@@ -21,7 +21,7 @@ export interface AssemblyPackageContent {
 export function buildPackageContent(
   snapshot: SupplierExtractionSnapshot, resolution: SupplierImportResolutionAggregate,
   imported: ItineraryDraftImportResult, timeline: AssemblyTimeline, ledger: SupplierImportAccounting[],
-  blockers: FinalizationFinding<FinalizationBlockerCode>[],
+  blockers: FinalizationFinding<FinalizationBlockerCode>[], optionalChronology = false,
 ): AssemblyPackageContent {
   const result: AssemblyPackageContent = {accommodations: [], inclusions: [], exclusions: [], conditions: []};
   const decisions = new Map(resolution.decisions.map((decision) => [decision.targetEntityId, decision]));
@@ -78,7 +78,7 @@ export function buildPackageContent(
         const reference = change.service;
         const targetId = reference?.kind === "staged_service" ? reference.serviceId : reference?.manualServiceId;
         const target = targetId === undefined ? undefined : timeline.services.get(targetId);
-        successful = target !== undefined && timeline.days.some((day) => day.entityId === target.dayId) &&
+        successful = target !== undefined && (optionalChronology && target.dayId === null || timeline.days.some((day) => day.entityId === target.dayId)) &&
           mapValue(value, fact.factKind, change.destination, target.data);
         outputIds = target === undefined ? [] : [String(target.data.id)];
       } else {

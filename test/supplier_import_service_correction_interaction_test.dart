@@ -53,7 +53,9 @@ void main() {
         );
         expect(
           serviceKey('correct-service-title'),
-          state == 'active' ? findsOneWidget : findsNothing,
+          state == 'active' || state == 'unassigned'
+              ? findsOneWidget
+              : findsNothing,
         );
         if (state == 'excluded') {
           expect(find.text('Kept correction'), findsWidgets);
