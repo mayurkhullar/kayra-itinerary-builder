@@ -117,8 +117,9 @@ Package exception controls now render current backend findings and explicit
 persisted decisions, with supported retain/map/exclude and change/revert commands
 through the existing Resolution mutation workflow. No local readiness policy or
 extra preflight exists. Mapping compatibility/losslessness and any separate
-structural review-issue requirements remain backend-authoritative. Canonical
-editor/navigation remains future work. Production extraction requests remain
+structural review-issue requirements remain backend-authoritative. The internal
+read-only canonical handoff is implemented; canonical editing remains future
+work. Production extraction requests remain
 V2.4-only; these UI changes do not deploy or change routing.
 
 Sections before **Canonical v2 architecture** describe the implemented legacy
@@ -126,8 +127,8 @@ model. The v2 pure TypeScript model/validator, deterministic Supplier Import
 assembly policy, private finalization receipt domain and internal Admin atomic
 finalization writer and authenticated finalization callable are implemented.
 The callable is not deployed. Strict read-only Flutter V2 parsing and repository
-support are implemented. Canonical navigation UI, migration, client access/index
-rollout and production extraction cutover remain future work.
+support and the internal read-only canonical handoff are implemented. Migration,
+client access/index rollout and production extraction cutover remain future work.
 
 The pure entry point is `supplierImportV2Assembly.ts`. It consumes a trusted
 complete Snapshot, Resolution aggregate and explicit context (`draftId`, `tripId`,
@@ -270,6 +271,28 @@ not perform arbitrary document lookups for every `sourcePackageId` in a list.
 This model deliberately excludes pricing, margins, payments, flights, visa,
 AI-provider payloads, extraction confidence scores, and master-record matching.
 
+### Internal post-finalization canonical handoff
+
+Successful Supplier Import finalization now hands off in the existing review
+page to the controller-loaded, identity-verified canonical V2 result. Applied,
+already-applied and authoritative pre-existing finalized results use the same
+read-only view, without an extra click or route. The canonical itinerary is
+primary; Snapshot/review history remains in state but is hidden in this view.
+A failed canonical read shows the existing safe recovery state, never a Snapshot
+masquerading as the final itinerary or a new finalization command.
+
+Days are optional. Nonempty days, Included Services (canonical unscheduled
+services), package accommodation, inclusions, exclusions and package conditions
+render independently in canonical order. Typed details and service conditions
+remain distinct; missing content creates no chronology or placeholders.
+Private import/provenance metadata is not rendered. This internal content view
+is not a public sanitization/publication boundary.
+
+Premium client proposal design, PDF/public sharing and operational scheduling
+remain future work. Pricing remains separate; no prices or additional AI calls
+are introduced. Production extraction remains **V2.4-only**; V3 is not declared
+production-ready.
+
 ## Trusted backend draft boundary
 
 The Functions backend mirrors this Dart schema with strict runtime validation.
@@ -366,8 +389,8 @@ Existing finalized results and their historical policies never change.
 
 The backend validators, stored reader and internal writer/finalizer are now
 implemented, including a separate strict read-only Flutter V2 reader. Deploying
-v2 still requires Flutter navigation/rendering integration, a trusted
-callable deployment and deliberate client access/index work before enabling writes.
+v2 still requires a trusted callable deployment and deliberate client
+access/index work before enabling writes.
 Old v1 clients cannot read/write v2 through their strict
 parser; keep the writer gated until compatible clients are available. Do not
 make old clients silently discard new fields on save. No destructive migration
@@ -644,4 +667,5 @@ Metadata/timeline dates require Firestore Timestamps; package accommodation date
 remain canonical date strings. `FirestoreItineraryDraftV2Repository.getDraft`
 performs one server read of the canonical draft and checks its requested identity
 and Trip. Existing V1 parsing and writes remain unchanged. This boundary adds no
-V2 writes, private receipt reads, callable invocation or UI integration.
+V2 writes or private receipt reads. The existing review controller now supplies
+verified V2 results to the internal read-only canonical handoff.

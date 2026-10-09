@@ -270,7 +270,13 @@ void main() {
   testWidgets('finalized unscheduled content remains read-only', (t) async {
     ui.h.resolutions.value = reviewResolution(finalized: true, revision: 2);
     await ui.show(t);
-    expect(serviceKey('review-service-staged-service-1'), findsOneWidget);
+    expect(serviceKey('review-service-staged-service-1'), findsNothing);
+    expect(
+      find.text(
+        'The finalized itinerary could not be loaded. Refresh to try again.',
+      ),
+      findsOneWidget,
+    );
     expect(serviceActions(), findsNothing);
     expect(find.text('Finalize itinerary'), findsNothing);
   });

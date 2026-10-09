@@ -162,13 +162,32 @@ void main() {
         find.text('Start review'),
         state == 'not-started' ? findsOneWidget : findsNothing,
       );
-      expect(inside('review-day-staged-day-1', 'Source day 3'), findsOneWidget);
-      // The source date is visible in both the day heading and source fields.
-      expect(
-        inside('review-day-staged-day-1', '10 Apr 2027'),
-        findsNWidgets(2),
-      );
-      expect(inside('review-day-staged-day-2', 'Source day 7'), findsOneWidget);
+      if (state == 'finalized') {
+        expect(
+          find.byKey(const ValueKey('review-snapshot-title')),
+          findsNothing,
+        );
+        expect(
+          find.text(
+            'The finalized itinerary could not be loaded. Refresh to try again.',
+          ),
+          findsOneWidget,
+        );
+      } else {
+        expect(
+          inside('review-day-staged-day-1', 'Source day 3'),
+          findsOneWidget,
+        );
+        // The source date is visible in both the day heading and source fields.
+        expect(
+          inside('review-day-staged-day-1', '10 Apr 2027'),
+          findsNWidgets(2),
+        );
+        expect(
+          inside('review-day-staged-day-2', 'Source day 7'),
+          findsOneWidget,
+        );
+      }
       expect(h.mutations.requests, isEmpty);
     });
   }

@@ -137,12 +137,25 @@ void main() {
         getActions(),
         status == 'active' ? findsNWidgets(3) : findsNothing,
       );
-      expect(inside('review-day-staged-day-1', 'Hotel stay'), findsOneWidget);
-      expect(
-        inside('review-day-staged-day-2', 'Kyoto city tour'),
-        findsOneWidget,
-      );
-      expect(inside('review-unassigned', 'Airport transfer'), findsOneWidget);
+      if (status == 'finalized') {
+        expect(
+          find.byKey(const ValueKey('review-snapshot-title')),
+          findsNothing,
+        );
+        expect(
+          find.text(
+            'The finalized itinerary could not be loaded. Refresh to try again.',
+          ),
+          findsOneWidget,
+        );
+      } else {
+        expect(inside('review-day-staged-day-1', 'Hotel stay'), findsOneWidget);
+        expect(
+          inside('review-day-staged-day-2', 'Kyoto city tour'),
+          findsOneWidget,
+        );
+        expect(inside('review-unassigned', 'Airport transfer'), findsOneWidget);
+      }
       expect(
         find.text('Start review'),
         status == 'not-started' ? findsOneWidget : findsNothing,

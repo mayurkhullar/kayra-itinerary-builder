@@ -439,7 +439,9 @@ void main() {
 
   for (final finalized in [false, true]) {
     testWidgets(
-      '${finalized ? "finalized" : "active"} resolution is read-only with history',
+      finalized
+          ? 'finalized without canonical reader blocks history handoff'
+          : 'active resolution retains history',
       (tester) async {
         h.resolutions.value = reviewResolution(
           revision: 2,
@@ -451,12 +453,24 @@ void main() {
           findsOneWidget,
         );
         if (finalized) {
-          expect(find.text('Finalized · Read-only'), findsOneWidget);
+          expect(
+            find.text(
+              'The finalized itinerary could not be loaded. Refresh to try again.',
+            ),
+            findsOneWidget,
+          );
+          expect(find.byKey(const ValueKey('review-history')), findsNothing);
+          expect(
+            find.byKey(const ValueKey('review-snapshot-title')),
+            findsNothing,
+          );
         }
         expect(find.text('Start review'), findsNothing);
-        expect(find.byKey(const ValueKey('review-history')), findsOneWidget);
-        await tap(tester, 'review-history-events');
-        expect(find.text('Open review'), findsOneWidget);
+        if (!finalized) {
+          expect(find.byKey(const ValueKey('review-history')), findsOneWidget);
+          await tap(tester, 'review-history-events');
+          expect(find.text('Open review'), findsOneWidget);
+        }
         expect(h.mutations.requests, isEmpty);
       },
     );

@@ -1,5 +1,6 @@
 import '../../domain/supplier_import_finalization.dart';
 import '../widgets/supplier_import/review_issue_action.dart';
+import '../widgets/canonical/finalized_canonical_view.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/layout/app_layout.dart';
@@ -161,6 +162,14 @@ class _SupplierImportReviewPageState extends State<SupplierImportReviewPage> {
   Widget build(BuildContext context) {
     final state = _controller.state;
     final loaded = state.loaded;
+    if (state is SupplierImportReviewFinalized && state.draft != null) {
+      return FinalizedCanonicalView(
+        draft: state.draft!,
+        onBack: widget.onBack,
+        onRefresh: _controller.refresh,
+      );
+    }
+    final sealed = loaded is SupplierImportReviewFinalized;
     final outcome = state.finalization?.outcome;
     final assessment =
         state is SupplierImportReviewActive &&
@@ -200,13 +209,15 @@ class _SupplierImportReviewPageState extends State<SupplierImportReviewPage> {
               Semantics(
                 header: true,
                 child: Text(
-                  'Review supplier extraction',
+                  sealed ? 'Finalized itinerary' : 'Review supplier extraction',
                   style: Theme.of(context).textTheme.headlineMedium,
                 ),
               ),
               const SizedBox(height: AppSpacing.s8),
               Text(
-                'Machine-extracted supplier content for consultant review.',
+                sealed
+                    ? 'The finalized itinerary must be loaded before it can be displayed.'
+                    : 'Machine-extracted supplier content for consultant review.',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: AppSpacing.s16),
@@ -236,7 +247,8 @@ class _SupplierImportReviewPageState extends State<SupplierImportReviewPage> {
                 ],
               ),
               const SizedBox(height: AppSpacing.s24),
-              if (!ReviewFinalizationAction.ownsNotice(state))
+              if (!ReviewFinalizationAction.ownsNotice(state) &&
+                  state is! SupplierImportReviewFinalized)
                 ReviewStateNotice(
                   key: _noticeKey,
                   state: state,
@@ -245,7 +257,16 @@ class _SupplierImportReviewPageState extends State<SupplierImportReviewPage> {
                 ),
               if (loaded == null && busy)
                 const _ReviewLoading()
-              else if (loaded != null) ...[
+              else if (sealed) ...[
+                if (busy)
+                  const LinearProgressIndicator()
+                else if (state is SupplierImportReviewFinalized)
+                  const ReviewPanel(
+                    child: Text(
+                      'The finalized itinerary could not be loaded. Refresh to try again.',
+                    ),
+                  ),
+              ] else if (loaded != null) ...[
                 Semantics(
                   header: true,
                   child: Text(

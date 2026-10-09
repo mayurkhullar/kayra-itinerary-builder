@@ -183,6 +183,28 @@ deliberate proposal revision, never a silent rewrite.
 Production extraction remains **V2.4-only**. This implementation does not deploy
 anything or declare V3 production-ready.
 
+### Internal post-finalization canonical handoff
+
+Successful Supplier Import finalization now hands off in the existing review
+page to the controller-loaded, identity-verified canonical V2 result. Applied,
+already-applied and authoritative pre-existing finalized results use the same
+read-only view, without an extra click or route. The canonical itinerary is
+primary; Snapshot/review history remains in state but is hidden in this view.
+A failed canonical read shows the existing safe recovery state, never a Snapshot
+masquerading as the final itinerary or a new finalization command.
+
+Days are optional. Nonempty days, Included Services (canonical unscheduled
+services), package accommodation, inclusions, exclusions and package conditions
+render independently in canonical order. Typed details and service conditions
+remain distinct; missing content creates no chronology or placeholders.
+Private import/provenance metadata is not rendered. This internal content view
+is not a public sanitization/publication boundary.
+
+Premium client proposal design, PDF/public sharing and operational scheduling
+remain future work. Pricing remains separate; no prices or additional AI calls
+are introduced. Production extraction remains **V2.4-only**; V3 is not declared
+production-ready.
+
 ## Supplier Source Inputs and Canonical Ingestion
 
 Supplier format and ingestion channel must not determine the itinerary domain
