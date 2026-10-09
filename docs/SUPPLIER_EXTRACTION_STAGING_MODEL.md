@@ -1897,12 +1897,15 @@ Adopt these stricter **application limits for the first finalizer**:
   encoding/index reserve. The application estimate is not exact SDK encoding or
   index measurement; JSON character counts alone are insufficient.
 
-Before enabling v2 writes, exempt the large embedded timeline/package/provenance
-and receipt-ledger fields from indexing where they are never queried, while
-preserving indexes required by real existing queries. Bound nesting below the
-platform limit. This is a future deployment prerequisite, not permission to
-edit indexes or deploy now. Reject output beyond any bound with a visible
-capacity blocker. Preserve all evidence/decisions, make no partial canonical
+Local index exemptions now cover the unqueried canonical `days`,
+`unscheduledServices`, `packageContent`, `importResult`, `sourcePackageIds`,
+`reviewIssues` and receipt `outcomes` fields, including embedded provenance.
+Actual draft reads use document IDs or Trip-scoped `createdAt` ordering; receipts
+use exact document IDs. Required query indexes remain enabled. See the query
+audit in `ITINERARY_DRAFT_MODEL.md`. Deployment is still a future prerequisite;
+this does not authorize deployment. Bound nesting below the platform limit.
+Reject output beyond any bound with a visible capacity blocker. Preserve all
+evidence/decisions, make no partial canonical
 write and do not truncate or tell consultants to discard correct facts to fit.
 A larger import requires a separately versioned persistence extension.
 
@@ -2010,8 +2013,9 @@ The combined budget is twice the four-document estimate plus 4 KiB; nesting is
 bounded below the platform ceiling. This conservative application estimate uses
 no undocumented SDK internals and makes **no exact Firestore protobuf or index
 size claim**. Firestore is the final hard limit. Any exceeded budget blocks
-without truncation or writes. Required index exemptions remain a future rollout
-prerequisite; no index or Rules changes are included here.
+without truncation or writes. Required index exemptions and client Rules
+safeguards are now configured locally; their deployment remains a future
+rollout prerequisite.
 
 Deterministic tests exercise the actual Admin adapter with read-before-write,
 optimistic version retry, create/update preconditions and atomic staged commits,
@@ -2079,3 +2083,23 @@ separate work is limited to explicit flight/visa destinations, lossless timeline
 field extensions and a typed multi-hotel alternatives grouping action where
 the current Snapshot/Resolution cannot express the relationship. None may be
 silently approximated to declare the whole V3 workflow ready.
+
+### Local security prerequisite status (no production cutover)
+
+Uploaded Supplier Source packages now reject every client update in local Rules,
+including changes to supplier identity/snapshot, ordered file membership and
+operational timestamps. Uploading metadata edits and completion/failure remain
+supported; failed packages remain immutable. Existing authorized reads are
+unchanged, and trusted Admin SDK cleanup/extraction/finalization bypass client
+Rules. No server behavior or Storage Rules changed.
+
+New client V1 creates cannot use the existing `supplier-import-` namespace.
+The deterministic V2 algorithm, historical IDs, receipts, hashes and exact replay
+remain unchanged. Historical V1 reads/updates and authorized V2 reads remain
+available; client V2 writes and private receipt access remain denied. This does
+not repair an already-existing collision or migrate historical documents.
+
+The canonical/receipt payload index exemptions described in section 25.7 are
+local configuration only. No Rules/index deployment or production verification
+has occurred in this prerequisite task. Production extraction remains V2.4-only;
+V3 routing/defaults, providers, pricing and Supplier Import UX are unchanged.

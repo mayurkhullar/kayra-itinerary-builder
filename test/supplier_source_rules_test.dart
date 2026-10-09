@@ -65,13 +65,130 @@ void main() {
                   'fileIds': ['file-1', 'file-2'],
                 },
                 uid: uid,
-                allowed:
-                    initial == 'uploading' ||
-                    (initial == 'uploaded' && target == 'uploaded'),
+                allowed: initial == 'uploading',
               );
             });
           }
         }
+      }
+
+      for (final uid in ['agent-1', 'admin-1']) {
+        test('$uid can create and complete a legitimate upload', () async {
+          final id = 'lifecycle-$uid-${DateTime.now().microsecondsSinceEpoch}';
+          final path = '$_documents/trips/trip-1/supplier_source_packages/$id';
+          final data = _package('uploading')
+            ..['uploadedByUid'] = uid
+            ..remove('createdAt')
+            ..remove('updatedAt');
+          await emulator.expectCommit(
+            {
+              'update': {'name': path, 'fields': _fields(data)},
+              'currentDocument': {'exists': false},
+              'updateTransforms': [
+                _serverTime('createdAt'),
+                _serverTime('updatedAt'),
+              ],
+            },
+            uid: uid,
+            allowed: true,
+          );
+          await emulator.expectCommit(
+            {
+              'update': {
+                'name': path,
+                'fields': _fields({
+                  'status': 'uploaded',
+                  'fileIds': ['file-1'],
+                }),
+              },
+              'updateMask': {
+                'fieldPaths': ['status', 'fileIds'],
+              },
+              'updateTransforms': [_serverTime('updatedAt')],
+              'currentDocument': {'exists': true},
+            },
+            uid: uid,
+            allowed: true,
+          );
+        });
+
+        final mutations = <String, Map<String, Object?>>{
+          'supplier ID': {'supplierId': 'supplier-2'},
+          'supplier name': {'supplierNameSnapshot': 'Changed supplier'},
+          'supplier unlink': {'supplierId': null, 'supplierNameSnapshot': null},
+          'file replacement': {
+            'fileIds': ['file-3', 'file-4'],
+          },
+          'file removal': {
+            'fileIds': ['file-1'],
+          },
+          'file addition': {
+            'fileIds': ['file-1', 'file-2', 'file-3'],
+          },
+          'file reordering': {
+            'fileIds': ['file-2', 'file-1'],
+          },
+          'empty files': {'fileIds': []},
+          'Trip identity': {'tripId': 'trip-2'},
+          'uploader': {'uploadedByUid': 'admin-1'},
+          'creation time': {'createdAt': DateTime.utc(2020)},
+          'unexpected operational field': {'repairRequested': true},
+          'unchanged status': {'status': 'uploaded'},
+        };
+        for (final mutation in mutations.entries) {
+          test('$uid cannot change uploaded ${mutation.key}', () async {
+            await emulator.seed({
+              'suppliers/supplier-1': {'name': 'Supplier one'},
+              'suppliers/supplier-2': {'name': 'Supplier two'},
+              _packagePath: {
+                ..._package('uploaded'),
+                'supplierId': 'supplier-1',
+                'supplierNameSnapshot': 'Supplier one',
+                'fileIds': ['file-1', 'file-2'],
+              },
+            });
+            await emulator.updatePackage(
+              mutation.value,
+              uid: uid,
+              allowed: false,
+            );
+          });
+        }
+        test(
+          '$uid cannot touch uploaded timestamp or replace unchanged evidence',
+          () async {
+            final data = _package('uploaded');
+            await emulator.seed({_packagePath: data});
+            await emulator.expectCommit(
+              {
+                'transform': {
+                  'document': '$_documents/$_packagePath',
+                  'fieldTransforms': [_serverTime('updatedAt')],
+                },
+              },
+              uid: uid,
+              allowed: false,
+            );
+            await emulator.expectCommit(
+              {
+                'update': {
+                  'name': '$_documents/$_packagePath',
+                  'fields': _fields(data),
+                },
+                'currentDocument': {'exists': true},
+              },
+              uid: uid,
+              allowed: false,
+            );
+          },
+        );
+        test(
+          '$uid can still read historical uploaded optional supplier metadata',
+          () async {
+            await emulator.seed({_packagePath: _package('uploaded')});
+            await emulator.expectRead(_packagePath, uid: uid, allowed: true);
+          },
+        );
       }
 
       test('in-progress metadata edit can omit status', () async {
@@ -83,21 +200,24 @@ void main() {
           allowed: true,
         );
       });
-      test('uploaded metadata edit keeps status and non-empty files', () async {
-        await emulator.seed({_packagePath: _package('uploaded')});
-        await emulator.updatePackage(
-          {
-            'fileIds': ['file-2', 'file-1'],
-          },
-          uid: 'agent-1',
-          allowed: true,
-        );
-        await emulator.updatePackage(
-          {'fileIds': []},
-          uid: 'agent-1',
-          allowed: false,
-        );
-      });
+      test(
+        'uploaded metadata edits are denied even with non-empty files',
+        () async {
+          await emulator.seed({_packagePath: _package('uploaded')});
+          await emulator.updatePackage(
+            {
+              'fileIds': ['file-2', 'file-1'],
+            },
+            uid: 'agent-1',
+            allowed: false,
+          );
+          await emulator.updatePackage(
+            {'fileIds': []},
+            uid: 'agent-1',
+            allowed: false,
+          );
+        },
+      );
       test(
         'failed package rejects metadata-only edits and timestamp-only writes',
         () async {

@@ -1,4 +1,12 @@
 {
   "indexes": [],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    { "collectionGroup": "itinerary_drafts", "fieldPath": "days", "indexes": [] },
+    { "collectionGroup": "itinerary_drafts", "fieldPath": "unscheduledServices", "indexes": [] },
+    { "collectionGroup": "itinerary_drafts", "fieldPath": "packageContent", "indexes": [] },
+    { "collectionGroup": "itinerary_drafts", "fieldPath": "importResult", "indexes": [] },
+    { "collectionGroup": "itinerary_drafts", "fieldPath": "sourcePackageIds", "indexes": [] },
+    { "collectionGroup": "itinerary_drafts", "fieldPath": "reviewIssues", "indexes": [] },
+    { "collectionGroup": "finalizations", "fieldPath": "outcomes", "indexes": [] }
+  ]
 }

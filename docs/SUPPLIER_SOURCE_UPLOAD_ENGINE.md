@@ -250,3 +250,35 @@ recovery and upload timeouts are deliberately not implemented. Do not expose a
 Cancel Upload button. In-flight writes/uploads must settle before rollback; a
 local timeout alone could allow late writes after cleanup. The future UI should
 await the operation and handle `SupplierSourceUploadFailure` categories.
+
+### Completed package evidence: client immutability
+
+The local Firestore Rules allow owner/Admin clients to create only `uploading`
+packages. While uploading, the existing validated `supplierId`,
+`supplierNameSnapshot`, `fileIds`, `status` and `updatedAt` updates remain allowed.
+Completion requires at least one file ID. The only transitions are
+`uploading -> uploading`, `uploading -> uploaded` and `uploading -> failed`.
+Both terminal states reject every subsequent client update, including timestamp
+refreshes and unchanged replacements. No delete permission is added.
+
+Package field classification:
+
+| Fields | Classification and lifecycle |
+|---|---|
+| Document ID, `tripId` | Immutable evidence identity/path. |
+| `supplierId`, `supplierNameSnapshot`, ordered `fileIds` | Evidence membership; editable only during uploading, frozen after completion. The nullable supplier pair remains supported for historical/optional linkage. |
+| `uploadedByUid`, `createdAt` | Immutable audit identity, fixed at creation. |
+| `status` | Monotonic operational state; terminal states cannot reopen. |
+| `updatedAt` | Request-time operational timestamp while uploading/completing; frozen in terminal states. |
+
+There are no additional server-only or legacy-only fields in the current exact
+package schema, and no legitimate post-upload client mutation path. Read access
+for historical packages is unchanged. The repository already rejects terminal
+updates. Cleanup claims only uploading/failed attempts and refuses uploaded
+packages; lost completion acknowledgements never authorize deleting completed
+evidence. Admin SDK operations bypass client Rules, so trusted cleanup,
+extraction, finalization and authorized operational repair are not constrained
+by these client permissions. No server repair workflow is added.
+
+These are local security prerequisites, not deployed Rules. Storage Rules and
+upload sequencing are unchanged. Production extraction remains V2.4-only.

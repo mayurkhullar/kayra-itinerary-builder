@@ -191,6 +191,129 @@ void main() {
         );
       });
 
+      for (final uid in ['agent-1', 'admin-1']) {
+        test('$uid cannot create V1 in any reserved finalization ID', () async {
+          for (final id in [
+            'supplier-import-',
+            'supplier-import-custom',
+            'supplier-import-${List.filled(64, 'a').join()}',
+          ]) {
+            await emulator.createDraft(
+              draftId: id,
+              data: _draft(createdByUid: uid),
+              uid: uid,
+              allowed: false,
+            );
+          }
+        });
+        test('$uid can create V1 at an ordinary auto-ID shaped ID', () async {
+          await emulator.createDraft(
+            draftId: uid == 'agent-1'
+                ? 'aB12cD34eF56gH78iJ90'
+                : 'zY98xW76vU54tS32rQ10',
+            data: _draft(createdByUid: uid),
+            uid: uid,
+            allowed: true,
+          );
+        });
+        test('$uid can read and update historical reserved-ID V1', () async {
+          const path =
+              'trips/trip-1/itinerary_drafts/supplier-import-historical';
+          await emulator.seed({path: _draft()});
+          await emulator.expectRead(path, uid: uid, allowed: true);
+          await emulator.updateDraft(
+            {'title': 'Historical update'},
+            path: path,
+            uid: uid,
+            allowed: true,
+          );
+        });
+        test('$uid cannot create V2 at ordinary or reserved IDs', () async {
+          for (final id in [
+            'v2-client-create',
+            'supplier-import-v2-client-create',
+          ]) {
+            await emulator.createDraft(
+              draftId: id,
+              data: {..._v2Draft(), 'createdByUid': uid},
+              uid: uid,
+              allowed: false,
+            );
+          }
+        });
+        test(
+          '$uid can read historical V2 but cannot edit or downgrade it',
+          () async {
+            const path =
+                'trips/trip-1/itinerary_drafts/supplier-import-existing-v2';
+            await emulator.seed({path: _v2Draft()});
+            await emulator.expectRead(path, uid: uid, allowed: true);
+            await emulator.updateDraft(
+              {'title': 'Client V2 edit'},
+              path: path,
+              uid: uid,
+              allowed: false,
+            );
+            final legacy = _draft()..remove('updatedAt');
+            await emulator.expectCommit(
+              {
+                'update': {
+                  'name': '$_documents/$path',
+                  'fields': _fields(legacy),
+                },
+                'currentDocument': {'exists': true},
+                'updateTransforms': [_serverTime('updatedAt')],
+              },
+              uid: uid,
+              allowed: false,
+            );
+          },
+        );
+        test(
+          '$uid cannot create, read, list, update or delete private receipts',
+          () async {
+            const root = 'trips/trip-1/supplier_extractions/extraction-1';
+            const resolution = '$root/resolutions/extraction-1';
+            const receipts = '$resolution/finalizations';
+            const path = '$receipts/command-1';
+            await emulator.seed({
+              root: {'persistenceState': 'complete'},
+              resolution: {'status': 'finalized'},
+              path: {'outcomes': <Object?>[]},
+            });
+            await emulator.expectRead(path, uid: uid, allowed: false);
+            await emulator.expectRead(receipts, uid: uid, allowed: false);
+            await emulator.expectCommit(
+              {
+                'update': {
+                  'name': '$_documents/$receipts/new',
+                  'fields': _fields({'outcomes': <Object?>[]}),
+                },
+                'currentDocument': {'exists': false},
+              },
+              uid: uid,
+              allowed: false,
+            );
+            await emulator.expectCommit(
+              {
+                'update': {
+                  'name': '$_documents/$path',
+                  'fields': _fields({'outcomes': <Object?>[]}),
+                },
+                'currentDocument': {'exists': true},
+              },
+              uid: uid,
+              allowed: false,
+            );
+            await emulator.expectCommit(
+              {'delete': '$_documents/$path'},
+              uid: uid,
+              allowed: false,
+            );
+          },
+        );
+      }
+
       test('missing parent Trip denies even Admin', () async {
         await emulator.seed({
           'trips/missing/itinerary_drafts/orphan': {
@@ -223,6 +346,20 @@ Map<String, Object?> _draft({
   'createdAt': DateTime.utc(2026, 9, 26, 8),
   'updatedAt': DateTime.utc(2026, 9, 26, 8),
 };
+
+// Reuse the existing canonical wire fixture; only root timestamps need REST conversion.
+Map<String, Object?> _v2Draft() {
+  final fixtures =
+      jsonDecode(
+            File(
+              'test/support/itinerary_draft_v2_fixture.json',
+            ).readAsStringSync(),
+          )
+          as Map<String, dynamic>;
+  return Map<String, Object?>.from(fixtures['minimal'] as Map)
+    ..['createdAt'] = DateTime.utc(2026, 9, 26, 8)
+    ..['updatedAt'] = DateTime.utc(2026, 9, 26, 8);
+}
 
 Map<String, Object?> _fields(Map<String, Object?> data) =>
     data.map((key, value) => MapEntry(key, _value(value)));
@@ -301,11 +438,12 @@ class _Emulator {
 
   Future<void> updateDraft(
     Map<String, Object?> patch, {
+    String path = _draftPath,
     required String uid,
     required bool allowed,
   }) => expectCommit(
     {
-      'update': {'name': '$_documents/$_draftPath', 'fields': _fields(patch)},
+      'update': {'name': '$_documents/$path', 'fields': _fields(patch)},
       'updateMask': {'fieldPaths': patch.keys.toList()},
       'updateTransforms': [_serverTime('updatedAt')],
       'currentDocument': {'exists': true},

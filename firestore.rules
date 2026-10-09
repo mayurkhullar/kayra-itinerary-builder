@@ -300,10 +300,8 @@ service cloud.firestore {
 
       allow update: if canAccessTripSources(tripId)
         && validSourcePackage(request.resource.data, tripId)
-        // Uploaded status is permanent; failed packages reject every update.
-        && (resource.data.status == 'uploading'
-          || (resource.data.status == 'uploaded'
-            && request.resource.data.status == 'uploaded'))
+        // Completed evidence and failed attempts are immutable to all clients.
+        && resource.data.status == 'uploading'
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'supplierId', 'supplierNameSnapshot', 'fileIds', 'status', 'updatedAt'
         ])
@@ -396,6 +394,8 @@ service cloud.firestore {
       // Arbitrary sourcePackageIds are deliberately not dereferenced here.
       // The repository validates same-Trip uploaded packages before writes.
       allow create: if canAccessTripItineraries(tripId)
+        // Reserve existing deterministic V2 IDs without changing historical reads/updates.
+        && !draftId.matches('supplier-import-.*')
         && validItineraryDraft(request.resource.data, tripId)
         && request.resource.data.createdByUid == request.auth.uid
         && request.resource.data.createdAt == request.time

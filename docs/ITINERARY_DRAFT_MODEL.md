@@ -128,7 +128,8 @@ assembly policy, private finalization receipt domain and internal Admin atomic
 finalization writer and authenticated finalization callable are implemented.
 The callable is not deployed. Strict read-only Flutter V2 parsing and repository
 support and the internal read-only canonical handoff are implemented. Migration,
-client access/index rollout and production extraction cutover remain future work.
+deployment of the local security/index prerequisites and production extraction
+cutover remain future work.
 
 The pure entry point is `supplierImportV2Assembly.ts`. It consumes a trusted
 complete Snapshot, Resolution aggregate and explicit context (`draftId`, `tripId`,
@@ -389,8 +390,8 @@ Existing finalized results and their historical policies never change.
 
 The backend validators, stored reader and internal writer/finalizer are now
 implemented, including a separate strict read-only Flutter V2 reader. Deploying
-v2 still requires a trusted callable deployment and deliberate client
-access/index work before enabling writes.
+v2 still requires a trusted callable deployment and deliberate rollout of the
+local client-access Rules and index exemptions before enabling production writes.
 Old v1 clients cannot read/write v2 through their strict
 parser; keep the writer gated until compatible clients are available. Do not
 make old clients silently discard new fields on save. No destructive migration
@@ -669,3 +670,55 @@ performs one server read of the canonical draft and checks its requested identit
 and Trip. Existing V1 parsing and writes remain unchanged. This boundary adds no
 V2 writes or private receipt reads. The existing review controller now supplies
 verified V2 results to the internal read-only canonical handoff.
+
+### Local persistence/security prerequisites (not deployed)
+
+New client V1 creates are denied when the document ID starts with
+`supplier-import-`. This reserves the existing deterministic V2 output namespace
+without changing its SHA-256 tuple algorithm, historical IDs, receipts, policies
+or replay digests. V1 client and backend writers continue using Firestore auto
+IDs. Existing V1 documents remain readable and retain their existing update
+permissions, even if a historical ID uses the reserved prefix. Existing V2
+reads remain authorized for the current active owner/Admin through the separate
+strict V2 reader; V2 client creates/updates and V2-to-V1 downgrades remain denied.
+Receipts remain private/server-owned. No migration or collision repair is added.
+
+`firestore.indexes.json` now contains single-field exemptions (`indexes: []`):
+
+| Collection group | Fields | Reason |
+|---|---|---|
+| `itinerary_drafts` | `days`, `unscheduledServices` | Embedded service/timeline arrays, including nested source references; never queried. |
+| `itinerary_drafts` | `packageContent` | Accommodation, statements, conditions and nested provenance; never queried. |
+| `itinerary_drafts` | `importResult` | Linkage map validated after document reads, never filtered/ordered. |
+| `itinerary_drafts` | `sourcePackageIds`, `reviewIssues` | Source membership and review arrays inspected in memory, never queried. |
+| `finalizations` | `outcomes` | Private receipt accounting with nested decision IDs, output targets and operations; read only by exact receipt ID. |
+
+The exemption on each map also covers its subfields. Configuration follows the
+[Firebase index definition](https://firebase.google.com/docs/reference/firestore/indexes).
+Index exemptions are not permissions and do not change stored content. They
+apply to V1 and V2 documents in the same collection group. No wildcard exemption
+or composite index change is used. Small identity/version/status/ownership and
+`createdAt`/`updatedAt` fields retain their automatic indexing.
+
+Query audit:
+
+- Flutter `FirestoreItineraryDraftRepository.getDraft` reads the Trip-scoped
+  document by ID; `updateDraft` uses that same read before updating.
+- Its `listDraftsForTrip` lists `trips/{tripId}/itinerary_drafts` ordered by
+  `createdAt` ascending, with no filter. That index remains enabled.
+- Flutter `FirestoreItineraryDraftV2Repository` reads one Trip-scoped document
+  by ID. Schema/version checks happen after reading, not in a query.
+- Admin `draftWriterAdmin` and `processorAdmin` allocate auto-ID documents in
+  the Trip subcollection and create them; they do not query canonical fields.
+- Admin `supplierImportFinalizationLoaderAdmin` and
+  `supplierImportFinalizationAdmin` read canonical drafts and receipts by exact
+  deterministic paths using `getAll`/transaction `getAll`, including replay.
+  Receipts have no client read/query path, collection listing, filter or order.
+- No draft/receipt collection-group query, nested-content query, version/status
+  filter or `updatedAt` ordering exists. Finalization's paged document-ID reads
+  concern Snapshot/Resolution children, not canonical drafts or receipts.
+
+The other atomic finalization writes (Resolution seal and audit event) contain
+bounded scalar linkage/audit fields, with no additional large payload requiring
+an exemption. These local Rules/index prerequisites are not deployed and do not
+constitute V3 cutover. Production extraction remains V2.4-only.
