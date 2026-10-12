@@ -492,3 +492,18 @@ function resolveSentinels(data) {
   }
   return data;
 }
+
+for (const phase of ['begin', 'children', 'finalize']) {
+  test(`stale terminalization prevents late V3 ${phase} writes`, async () => {
+    const f = fixture();
+    if (phase !== 'begin') await f.store.beginSnapshot(f.records, f.trustedPackage);
+    if (phase === 'finalize') await f.store.writeSnapshotChildren(f.records);
+    Object.assign(f.db.records.get(jobPath), {status: 'failed', failureCode: 'processing_stale', staleAfter: null});
+    const before = JSON.stringify([...f.db.records]);
+    await assert.rejects(() => phase === 'begin' ? f.store.beginSnapshot(f.records, f.trustedPackage) :
+      phase === 'children' ? f.store.writeSnapshotChildren(f.records) : f.store.finalizeSnapshot(f.records, f.trustedPackage),
+      hasCode('SUPPLIER_EXTRACTION_JOB_STATE_MISMATCH'));
+    assert.equal(JSON.stringify([...f.db.records]), before);
+    assert.notEqual(f.db.records.get(rootPath)?.persistenceState, 'complete');
+  });
+}

@@ -470,3 +470,36 @@ function fakeJobDatabase(records) {
     },
   };
 }
+
+for (const status of ['queued', 'processing']) {
+  for (const contract of [itineraryDraftExtractionContractVersion, supplierExtractionContractVersion]) {
+    test(`${contract} ${status} strictly reads optional server deadline`, () => {
+      const deadline = Timestamp.fromMillis(900000);
+      assert.equal(parse(versioned(contract, status, {staleAfter: deadline})).staleAfter, deadline);
+      for (const invalidValue of [null, undefined, 1, 'tomorrow', {}]) {
+        assert.throws(() => parse(versioned(contract, status, {staleAfter: invalidValue})), invalid);
+      }
+    });
+  }
+}
+for (const status of ['completed', 'failed']) {
+  test(`${status} deadline is absent or null, never active`, () => {
+    assert.equal(parse(legacy(status, {staleAfter: null})).staleAfter, null);
+    assert.throws(() => parse(legacy(status, {staleAfter: Timestamp.now()})), invalid);
+  });
+}
+for (const failureCode of ['queued_stale', 'processing_stale']) {
+  test(`${failureCode} remains typed across both result contracts`, () => {
+    for (const contract of [itineraryDraftExtractionContractVersion, supplierExtractionContractVersion]) {
+      assert.equal(parse(versioned(contract, 'failed', {failureCode, staleAfter: null})).failureCode, failureCode);
+    }
+  });
+}
+test('both recovery windows exceed configured maximum execution', () => {
+  const {itineraryExtractionTriggerOptions} = require('../lib/itineraryExtraction/trigger');
+  const policy = require('../lib/itineraryExtraction/extractionJobRecovery');
+  assert.equal(itineraryExtractionTriggerOptions.timeoutSeconds, 540);
+  assert.ok(policy.processingRecoveryWindowMs > itineraryExtractionTriggerOptions.timeoutSeconds * 1000);
+  assert.equal(policy.queuedRecoveryWindowMs, 900000);
+  assert.equal(policy.processingRecoveryWindowMs, 900000);
+});

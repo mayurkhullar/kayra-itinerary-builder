@@ -15,6 +15,7 @@ enum ItineraryExtractionPackageStateKind {
   requesting,
   queued,
   processing,
+  longRunning,
   completed,
   failed,
   error,
@@ -41,9 +42,17 @@ final class ItineraryExtractionController extends ChangeNotifier {
     required this.tripId,
     required ItineraryExtractionJobRepository jobs,
     required ItineraryExtractionRequestClient requests,
+    DateTime Function()? now,
   }) : _jobs = jobs,
-       _requests = requests;
+       _requests = requests,
+       _now = now ?? DateTime.now;
 
+  final DateTime Function() _now;
+  Timer? _recoveryTimer;
+  final Map<String, DateTime> _retryOfferAfter = {};
+  // An early retry (for example from a fast client clock) returns to progress.
+  // Re-offer locally later; this timer never requests or polls anything.
+  static const _retryOfferDelay = Duration(minutes: 1);
   final String tripId;
   final ItineraryExtractionJobRepository _jobs;
   final ItineraryExtractionRequestClient _requests;
@@ -118,6 +127,13 @@ final class ItineraryExtractionController extends ChangeNotifier {
     if (pending != null) return _stateForStatus(pending);
     final job = _latestJobs[package.id];
     if (job != null) {
+      final deadline = _presentationDeadline(job);
+      if (deadline != null && !_now().isBefore(deadline)) {
+        return ItineraryExtractionPackageState(
+          kind: ItineraryExtractionPackageStateKind.longRunning,
+          resultType: job.resultType,
+        );
+      }
       return _stateForStatus(
         job.status,
         resultType: job.resultType,
@@ -150,6 +166,9 @@ final class ItineraryExtractionController extends ChangeNotifier {
         sourcePackageId: sourcePackageId,
       );
       if (!_isCurrentBinding(sourcePackageId, version)) return;
+      if (!result.createdNew) {
+        _retryOfferAfter[result.jobId] = _now().add(_retryOfferDelay);
+      }
       _latestJobs.remove(sourcePackageId);
       _pendingStatuses[sourcePackageId] = result.status;
       _notify();
@@ -261,11 +280,33 @@ final class ItineraryExtractionController extends ChangeNotifier {
       status == KayraItineraryExtractionStatus.queued ||
       status == KayraItineraryExtractionStatus.processing;
 
+  DateTime? _presentationDeadline(KayraItineraryExtractionJob job) {
+    final deadline = job.recoveryDeadline;
+    if (deadline == null) return null;
+    final deferred = _retryOfferAfter[job.id];
+    return deferred != null && deferred.isAfter(deadline) ? deferred : deadline;
+  }
+
   void _notify() {
-    if (!_disposed) notifyListeners();
+    if (_disposed) return;
+    _recoveryTimer?.cancel();
+    final now = _now();
+    DateTime? next;
+    for (final job in _latestJobs.values) {
+      final deadline = _presentationDeadline(job);
+      if (deadline != null &&
+          deadline.isAfter(now) &&
+          (next == null || deadline.isBefore(next))) {
+        next = deadline;
+      }
+    }
+    if (next != null) _recoveryTimer = Timer(next.difference(now), _notify);
+    notifyListeners();
   }
 
   void _cancelSubscriptions() {
+    _recoveryTimer?.cancel();
+    _retryOfferAfter.clear();
     for (final subscription in _subscriptions.values) {
       unawaited(subscription.cancel());
     }
@@ -285,6 +326,9 @@ final class ItineraryExtractionController extends ChangeNotifier {
 String itineraryExtractionFailureMessage(
   KayraItineraryExtractionFailureCode? code,
 ) => switch (code) {
+  KayraItineraryExtractionFailureCode.queuedStale ||
+  KayraItineraryExtractionFailureCode.processingStale =>
+    'This extraction took longer than expected. Please try again.',
   KayraItineraryExtractionFailureCode.sourceUnavailable =>
     'The Supplier Source could not be read. Please check the uploaded files and try again.',
   KayraItineraryExtractionFailureCode.unsupportedSource =>

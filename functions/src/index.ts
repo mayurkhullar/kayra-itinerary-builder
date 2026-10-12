@@ -36,7 +36,9 @@ export const requestItineraryExtraction = onCall(
   {region: "asia-south2"},
   async (request) => requestExtraction(
     request,
-    () => adminExtractionRequestDependencies(getFirestore()),
+    () => adminExtractionRequestDependencies(getFirestore(), {
+      log: (event, fields) => logger.info(event, fields),
+    }),
     (event, fields) => logger.info(event, fields),
   ),
 );

@@ -189,3 +189,14 @@ test('failure finalization writes only supplier-compatible failure state', async
   assert.equal(f.state.records.get(jobPath).resultingExtractionId, null);
   assert.equal(f.state.records.get(jobPath).resultingDraftId, null);
 });
+
+for (const failureCode of ['queued_stale', 'processing_stale']) {
+  test(`late V3 claim and failure finalization preserve ${failureCode}`, async () => {
+    const f = memoryDb(supplierJob());
+    const claim = await f.store.claimSupplierExtractionJob(tripId, jobId);
+    Object.assign(f.state.records.get(jobPath), {status: 'failed', failureCode, staleAfter: null});
+    assert.deepEqual(await f.store.claimSupplierExtractionJob(tripId, jobId), {kind: 'terminal_failure', failureCode});
+    assert.deepEqual(await f.store.finalizeSupplierExtractionFailure(claim.job, 'extraction_failed'), {kind: 'failed', failureCode});
+    assert.equal(f.state.updates.length, 1);
+  });
+}

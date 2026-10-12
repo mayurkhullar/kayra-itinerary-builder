@@ -43,6 +43,55 @@ KayraItineraryExtractionJob _parse(Map<String, Object?> record) =>
     KayraItineraryExtractionJob.fromMap(record, documentId: 'job-1');
 
 void main() {
+  for (final status in [
+    KayraItineraryExtractionStatus.queued,
+    KayraItineraryExtractionStatus.processing,
+  ]) {
+    test('${status.value} historical fallback and strict deadline', () {
+      final historical = _parse(_legacyRecord(status: status));
+      expect(
+        historical.recoveryDeadline,
+        _updatedAt.add(const Duration(minutes: 15)),
+      );
+      final deadline = _updatedAt.add(const Duration(minutes: 30));
+      final job = _parse({
+        ..._legacyRecord(status: status),
+        'staleAfter': deadline,
+      });
+      expect(job.recoveryDeadline, deadline);
+      expect(job.toMap()['staleAfter'], deadline);
+      for (final bad in [null, 'tomorrow', 1, <String, Object?>{}]) {
+        expect(
+          () => _parse({..._legacyRecord(status: status), 'staleAfter': bad}),
+          throwsFormatException,
+        );
+      }
+    });
+  }
+  for (final code in [
+    KayraItineraryExtractionFailureCode.queuedStale,
+    KayraItineraryExtractionFailureCode.processingStale,
+  ]) {
+    test(
+      '${code.value} is a terminal typed failure with no recovery deadline',
+      () {
+        final data = {
+          ..._versionedRecord(
+            status: KayraItineraryExtractionStatus.failed,
+            failureCode: code,
+          ),
+          'staleAfter': null,
+        };
+        expect(_parse(data).recoveryDeadline, isNull);
+        expect(_parse(data).failureCode, code);
+        expect(
+          () => _parse({...data, 'staleAfter': _updatedAt}),
+          throwsFormatException,
+        );
+      },
+    );
+  }
+
   test('historical queued and processing jobs infer the draft contract', () {
     for (final status in [
       KayraItineraryExtractionStatus.queued,

@@ -1,3 +1,4 @@
+import {Timestamp} from "firebase-admin/firestore";
 import {validSourceIdentity} from "./sourceReaderValidation";
 
 export const itineraryDraftExtractionContractVersion =
@@ -16,6 +17,8 @@ export type ExtractionJobStatus =
   "queued" | "processing" | "completed" | "failed";
 
 export type ExtractionJobFailureCode =
+  "queued_stale" |
+  "processing_stale" |
   "source_unavailable" |
   "unsupported_source" |
   "extraction_failed" |
@@ -26,6 +29,7 @@ export type ExtractionJobFailureCode =
 export type ExtractionJobPersistenceShape = "legacy" | "versioned";
 
 export interface ExtractionJobRecord {
+  staleAfter?: unknown;
   persistenceShape: ExtractionJobPersistenceShape;
   tripId: string;
   sourcePackageId: string;
@@ -71,6 +75,8 @@ const versionedJobFields = [
 ] as const;
 
 const genericFailureCodes = new Set<ExtractionJobFailureCode>([
+  "queued_stale",
+  "processing_stale",
   "source_unavailable",
   "unsupported_source",
   "extraction_failed",
@@ -141,6 +147,11 @@ export function parseExtractionJobRecord(
     createdAt,
     updatedAt,
   };
+  if (Object.prototype.hasOwnProperty.call(data, "staleAfter")) {
+    if (data.staleAfter !== null && !(data.staleAfter instanceof Timestamp)) throw invalidJob();
+    parsed.staleAfter = data.staleAfter === null ? null : timestamp(data.staleAfter, options);
+    if ((status === "queued" || status === "processing") ? parsed.staleAfter === null : parsed.staleAfter !== null) throw invalidJob();
+  }
   validateOutcome(parsed);
   return Object.freeze(parsed);
 }
@@ -314,6 +325,7 @@ function outcomeUpdate(
   },
 ): Record<string, unknown> {
   const update: Record<string, unknown> = {
+    ...(job.staleAfter !== undefined && (outcome.status === "completed" || outcome.status === "failed") ? {staleAfter: null} : {}),
     status: outcome.status,
     resultingDraftId: outcome.resultingDraftId,
     failureCode: outcome.failureCode,
@@ -346,10 +358,11 @@ function exactFields(
   fields: readonly string[],
 ): void {
   const keys = Object.keys(data);
-  if (keys.length !== fields.length ||
+  const optional = Object.prototype.hasOwnProperty.call(data, "staleAfter") ? ["staleAfter"] : [];
+  if (keys.length !== fields.length + optional.length ||
       fields.some((field) =>
         !Object.prototype.hasOwnProperty.call(data, field)) ||
-      keys.some((key) => !fields.includes(key))) {
+      keys.some((key) => !fields.includes(key) && !optional.includes(key))) {
     throw invalidJob();
   }
 }
@@ -421,7 +434,8 @@ function parseResultType(input: unknown): ExtractionJobResultType {
 
 function nullableFailureCode(input: unknown): ExtractionJobFailureCode | null {
   if (input === null) return null;
-  if (input === "source_unavailable" || input === "unsupported_source" ||
+  if (input === "queued_stale" || input === "processing_stale" ||
+      input === "source_unavailable" || input === "unsupported_source" ||
       input === "extraction_failed" ||
       input === "invalid_extraction_result" ||
       input === "draft_persistence_failed" ||

@@ -240,6 +240,7 @@ test('queued job is claimed and valid output completes atomically', async () => 
   assert.ok(draft.data.createdAt.isEqual(FieldValue.serverTimestamp()));
   assert.ok(draft.data.updatedAt.isEqual(FieldValue.serverTimestamp()));
   assert.deepEqual(completedUpdate.data, {
+    staleAfter: null,
     status: 'completed',
     resultingDraftId: 'generated-1',
     failureCode: null,
@@ -493,3 +494,30 @@ for (const status of ['completed', 'failed']) {
     assert.equal(f.records.get(jobPath).status, status);
   });
 }
+
+for (const failureCode of ['queued_stale', 'processing_stale']) {
+  test(`late trigger for ${failureCode} cannot call provider`, async () => {
+    const admin = adminFixture(queuedJob({status: 'failed', failureCode, staleAfter: null}));
+    let calls = 0;
+    await assert.rejects(processItineraryExtractionJob({tripId, jobId}, {
+      jobs: admin.jobs, sources: sourceFixture().dependencies,
+      provider: {extract: async () => {calls++; return providerPayload();}},
+    }), processorCode('JOB_NOT_PROCESSABLE'));
+    assert.equal(calls, 0);
+  });
+}
+
+test('late V1 provider result cannot resurrect a stale-terminalized execution', async () => {
+  let calls = 0;
+  const f = processorFixture({provider: {extract: async () => {
+    calls++;
+    Object.assign(f.admin.records.get(jobPath), {status: 'failed', failureCode: 'processing_stale', staleAfter: null});
+    return providerPayload();
+  }}});
+  await assert.rejects(f.run());
+  assert.equal(calls, 1);
+  assert.equal(f.admin.creates.length, 0);
+  assert.equal(f.admin.records.get(jobPath).failureCode, 'processing_stale');
+  await assert.rejects(f.run(), processorCode('JOB_NOT_PROCESSABLE'));
+  assert.equal(calls, 1);
+});

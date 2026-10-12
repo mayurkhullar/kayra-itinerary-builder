@@ -1,3 +1,4 @@
+import {processingRecoveryWindowMs} from "./extractionJobRecovery";
 import {
   FieldValue,
   Firestore,
@@ -95,6 +96,9 @@ export function adminSupplierExtractionProcessorJobStore(
           case "queued": {
             transaction.update(reference, {
               ...processingExtractionJobUpdate(record),
+              staleAfter: Timestamp.fromMillis(
+                Timestamp.now().toMillis() + processingRecoveryWindowMs,
+              ),
               updatedAt: FieldValue.serverTimestamp(),
             });
             return {

@@ -7,7 +7,8 @@ import {
   resultTypeForExtractionContract,
   versionedQueuedExtractionJobData,
 } from "./extractionJob";
-import {ExtractionRequestDependencies} from "./request";
+import {ExtractionRequestDependencies, ExtractionRequestLog} from "./request";
+import {extractionRecoveryDeadline, queuedRecoveryWindowMs, staleExtractionJobUpdate} from "./extractionJobRecovery";
 import {
   ExtractionRequestContext,
   ExtractionRequestInput,
@@ -18,6 +19,8 @@ export const currentProductionExtractionContractVersion =
   itineraryDraftExtractionContractVersion;
 
 export interface AdminExtractionRequestOptions {
+  now?: () => Timestamp;
+  log?: ExtractionRequestLog;
   extractionContractVersion?: ExtractionContractVersion;
   persistVersionedContractMetadata?: boolean;
 }
@@ -37,54 +40,71 @@ export function adminExtractionRequestDependencies(
     throw new Error("Only the legacy draft contract may omit metadata.");
   }
   return {
-    requestJob: (uid, input) => db.runTransaction(async (transaction) => {
-      const trip = db.doc(`trips/${input.tripId}`);
-      const profile = db.doc(`users/${uid}`);
-      const sourcePackage = trip.collection("supplier_source_packages")
-        .doc(input.sourcePackageId);
-      const jobs = trip.collection("itinerary_extraction_jobs");
+    requestJob: async (uid, input) => {
+      const committed = await db.runTransaction(async (transaction) => {
+        const trip = db.doc(`trips/${input.tripId}`);
+        const profile = db.doc(`users/${uid}`);
+        const sourcePackage = trip.collection("supplier_source_packages")
+          .doc(input.sourcePackageId);
+        const jobs = trip.collection("itinerary_extraction_jobs");
 
-      const [profileSnapshot, tripSnapshot, packageSnapshot] =
-        await transaction.getAll(profile, trip, sourcePackage);
-      const context: ExtractionRequestContext = {
-        profile: profileSnapshot.data() ?? null,
-        trip: tripSnapshot.data() ?? null,
-        sourcePackage: packageSnapshot.data() ?? null,
-      };
-      requireExtractionContext(context, uid, input);
-
-      // Query by one automatically indexed field. The transaction gives the
-      // authorization reads and active-job check one authoritative snapshot.
-      const attempts = await transaction.get(
-        jobs.where("sourcePackageId", "==", input.sourcePackageId),
-      );
-      const active = attempts.docs.find((snapshot) => {
-        const job = parseExtractionJobRecord(snapshot.data(), {
-          isTimestamp: (value) => value instanceof Timestamp,
-        });
-        return job.extractionContractVersion === extractionContractVersion &&
-          (job.status === "queued" || job.status === "processing");
-      });
-      if (active) {
-        const activeJob = parseExtractionJobRecord(active.data(), {
-          isTimestamp: (value) => value instanceof Timestamp,
-        });
-        return {
-          jobId: active.id,
-          status: activeJob.status as "queued" | "processing",
-          createdNew: false,
+        const [profileSnapshot, tripSnapshot, packageSnapshot] =
+          await transaction.getAll(profile, trip, sourcePackage);
+        const context: ExtractionRequestContext = {
+          profile: profileSnapshot.data() ?? null,
+          trip: tripSnapshot.data() ?? null,
+          sourcePackage: packageSnapshot.data() ?? null,
         };
-      }
+        requireExtractionContext(context, uid, input);
 
-      const job = jobs.doc();
-      transaction.create(job, queuedJobData(
-        input,
-        uid,
-        extractionContractVersion,
-        persistVersionedContractMetadata,
-      ));
-      return {jobId: job.id, status: "queued", createdNew: true};
-    }),
+        // Query by one automatically indexed field. The transaction gives the
+        // authorization reads and active-job check one authoritative snapshot.
+        const attempts = await transaction.get(
+          jobs.where("sourcePackageId", "==", input.sourcePackageId),
+        );
+        const active = attempts.docs.map((snapshot) => ({snapshot,
+          job: parseExtractionJobRecord(snapshot.data(), {
+            isTimestamp: (value) => value instanceof Timestamp,
+          }),
+        })).filter(({job}) => job.extractionContractVersion === extractionContractVersion &&
+          (job.status === "queued" || job.status === "processing"));
+        const now = (options.now ?? Timestamp.now)();
+        const fresh = active.find(({job}) => now.toMillis() < extractionRecoveryDeadline(job).toMillis());
+        if (fresh) return {result: {
+          jobId: fresh.snapshot.id,
+          status: fresh.job.status as "queued" | "processing",
+          createdNew: false,
+        }, recovered: []};
+
+        // All reads precede writes. Query conflicts retry this transaction, so a
+        // concurrent request sees the replacement instead of creating a second one.
+        for (const {snapshot, job} of active) {
+          transaction.update(jobs.doc(snapshot.id), {
+            ...staleExtractionJobUpdate(job, now),
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+        }
+        const job = jobs.doc();
+        transaction.create(job, {...queuedJobData(
+          input,
+          uid,
+          extractionContractVersion,
+          persistVersionedContractMetadata,
+        ), staleAfter: Timestamp.fromMillis(now.toMillis() + queuedRecoveryWindowMs)});
+        return {result: {jobId: job.id, status: "queued" as const, createdNew: true},
+          recovered: active.map(({snapshot, job: old}) => ({
+            functionName: "requestItineraryExtraction", tripId: input.tripId,
+            oldJobId: snapshot.id, newJobId: job.id, extractionContractVersion,
+            priorStatus: old.status,
+            failureCode: old.status === "queued" ? "queued_stale" : "processing_stale",
+          }))};
+      });
+      // Log only committed recovery, never speculative transaction retries.
+      for (const fields of committed.recovered) {
+        options.log?.("itinerary-extraction-stale-active-job-replaced", fields);
+      }
+      return committed.result;
+    },
   };
 }
 

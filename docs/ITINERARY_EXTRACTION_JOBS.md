@@ -449,8 +449,8 @@ for an authoritative explicit V3 job. The request callable still creates only
 the historical V2.4 contract, so this routing capability does not change
 ordinary application behavior or give clients a contract selector. A duplicate
 invocation that finds a job already in `processing` returns
-`already_processing` without another provider call; stale job lease/recovery
-remains a separate follow-up. Before recording a persistence failure after an
+`already_processing` without another provider call. Explicit request-time stale
+recovery is implemented locally as described below. Before recording a persistence failure after an
 ambiguous write, the processor re-reads the authoritative root and job pair. A
 valid completed pair is success, a verified writing/processing pair may be
 failed with `supplier_extraction_persistence_failed`, and an inconsistent or
@@ -525,18 +525,73 @@ on queued/processing/failed jobs, no matching result ID on completed jobs, both
 IDs, a failure code on completed jobs, or legacy documents whose existing
 status/outcome invariants do not hold.
 
-### Stale active jobs
+### Explicit recovery of long-running active jobs (local implementation)
 
-Contract-aware deduplication prevents an old active V2.4 job from being returned
-as the result of a V3 request. It does not solve a queued or processing job that
-is stale within the same contract; that job would still deduplicate forever.
+Active jobs may carry an optional, server-owned Firestore `Timestamp`
+`staleAfter`. It is separate from the legacy/versioned result discriminator.
+New requests set it to backend time plus **15 minutes** while queued. A successful
+transactional claim replaces it with backend claim time plus **15 minutes**.
+The configured create-trigger timeout remains **540 seconds**; the processing
+window provides six additional minutes beyond that maximum. Queue recovery uses
+the same conservative window to allow ordinary dispatch delay. Named backend
+constants in `extractionJobRecovery.ts` define both windows.
 
-Stale-job recovery remains a separate required follow-up. It should use a
-server-owned lease/age policy and an auditable terminalization or recovery path,
-never a client-controlled bypass. Deterministic extraction identity and the
-`writing` visibility state keep a future V3 recovery from creating multiple
-visible snapshots, but they do not by themselves authorize reclaiming a
-processing job or making another model call.
+The field is strictly typed: if present on an active job it must be a Timestamp;
+terminal jobs permit absent/null only. Completion/failure clears an existing
+deadline to null. Historical active jobs without the field use their trusted
+`updatedAt + 15 minutes`; no migration is needed. Historical terminal jobs are
+not rewritten. Partial/unknown version metadata and malformed deadlines still
+fail closed in TypeScript and Flutter readers. Flutter converts the Timestamp to
+UTC DateTime at its existing repository boundary.
+
+Only an explicit consultant request through `requestItineraryExtraction` can
+recover an expired attempt. Its existing authorization/package checks and
+source-package query remain in the same transaction. Effective contract is
+server-selected and still defaults to the V2.4 draft path. A fresh same-contract
+queued/processing attempt returns unchanged, with no new job. If all matching
+active attempts have expired, the transaction marks them failed with
+`queued_stale` or `processing_stale`, clears result IDs/deadlines, and creates
+exactly one fresh queued attempt with the same effective contract/result type.
+Transactional conflicts cause re-evaluation; a concurrent retry returns that
+fresh replacement. Other-contract attempts are untouched. Existing normal
+failed/completed request semantics remain unchanged; no completed-rerun UI is
+introduced by this change.
+
+An old attempt is never reopened. Both processors still claim only queued jobs;
+duplicate processing/terminal deliveries perform no model work. V1 draft creation
+and job completion share a transaction that rechecks the job is processing.
+V3 root creation, every child-write transaction and final root/job promotion
+also recheck the authoritative processing job and its identity. After recovery,
+a late execution cannot create further Snapshot content, promote a partial root,
+create a draft or overwrite terminal status. Any previously written V3 partial
+root remains `writing` and inaccessible; cleanup of abandoned roots is separate.
+Admin failure finalization also preserves terminal state. No distributed lease
+reclaim or automatic re-execution is introduced.
+
+Flutter uses the server deadline (or documented historical fallback) solely to
+offer **This extraction is taking longer than expected.** and one **Try again**
+action. Before eligibility it retains normal progress. A cancellable local timer
+only notifies presentation listeners; it never polls, writes or requests anything.
+The action uses the existing request client/controller, disables duplicate taps
+in flight, and observes the returned job ID. A fresh job returned because the
+client clock was fast resumes progress; a one-minute presentation-only cooldown
+prevents an immediate repeat offer, after which eligibility can be shown again.
+The server always checks its own clock, so early retries create no replacement
+and incur no new provider call. Disposal/load cancels presentation timers.
+
+After a successful recovery transaction, one privacy-safe
+`itinerary-extraction-stale-active-job-replaced` event records the function name,
+Trip ID, old/new job IDs, effective contract, prior status and typed failure code.
+Speculative transaction retries do not log committed recovery. No source content,
+provider response, client information or pricing is logged.
+
+There is no provider call in the request path, scheduled Function, cron sweep,
+automatic request, extra model pass or new callable. A recovered attempt starts
+only through the existing create trigger after the consultant explicitly retries.
+A prior failed execution may already have consumed credits; recovery cannot
+recover that spend. V3/default cutover and deliberate completed-extraction rerun
+remain separate work. Production extraction remains **V2.4-only**. Rules already
+deny every client job write and are unchanged. Nothing is deployed by this task.
 
 ### Recommended implementation checkpoints
 
@@ -565,4 +620,5 @@ processing job or making another model call.
    sanitization before enabling finalization.
 8. Change the callable's single server-owned current contract to V3 and make
    active deduplication contract-aware. Do not add a client version selector.
-9. Add stale active-job recovery as its own audited backend task.
+9. The local explicit stale active-job recovery above is implemented; deployment
+   and production verification remain separate tasks.

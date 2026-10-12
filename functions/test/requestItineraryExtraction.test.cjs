@@ -45,7 +45,7 @@ function fixture(options = undefined) {
     ['trips/trip-1', initial.trip],
     [packagePath, initial.sourcePackage],
   ]);
-  const state = {records, creates: [], logs: [], nextId: 0};
+  const state = {records, creates: [], logs: [], nextId: 0, now: 2000, revision: 0};
 
   const collection = (path) => ({
     path,
@@ -67,6 +67,8 @@ function fixture(options = undefined) {
   });
   const snapshot = (ref) => ({
     id: ref.id,
+    ref,
+    exists: records.has(ref.path),
     data: () => records.has(ref.path) ? {...records.get(ref.path)} : undefined,
   });
   const querySnapshot = (query) => ({
@@ -80,23 +82,41 @@ function fixture(options = undefined) {
   const db = {
     doc: reference,
     async runTransaction(callback) {
+      for (;;) {
+      const revision = state.revision;
       const writes = [];
       const result = await callback({
         getAll,
-        get: async (target) => querySnapshot(target),
+        get: async (target) => target.kind === "query" ? querySnapshot(target) : snapshot(target),
+        update(ref, data) { writes.push(() => {
+          assert.ok(records.has(ref.path));
+          records.set(ref.path, {...records.get(ref.path), ...materialize(data)});
+        }); },
         create(ref, data) {
           writes.push(() => {
             if (records.has(ref.path)) throw new Error('already exists');
-            records.set(ref.path, {...data});
+            records.set(ref.path, materialize(data));
             state.creates.push({path: ref.path, data: {...data}});
           });
         },
       });
+      if (revision !== state.revision) continue;
       writes.forEach((write) => write());
+      if (writes.length) state.revision++;
       return result;
+      }
     },
   };
-  state.dependencies = adminExtractionRequestDependencies(db, options);
+  function materialize(data) {
+    return Object.fromEntries(Object.entries(data).map(([key, value]) =>
+      [key, value instanceof FieldValue ? Timestamp.fromMillis(state.now) : value]));
+  }
+  state.db = db;
+  state.dependencies = adminExtractionRequestDependencies(db, {
+    now: () => Timestamp.fromMillis(state.now),
+    log: (event, fields) => state.logs.push({event, ...fields}),
+    ...options,
+  });
   state.run = (request = {auth, data: input}) => requestExtraction(
     request,
     state.dependencies,
@@ -285,6 +305,7 @@ test('new request writes exactly one provider-independent queued job', async () 
     'requestedByUid',
     'resultingDraftId',
     'sourcePackageId',
+    'staleAfter',
     'status',
     'tripId',
     'updatedAt',
@@ -422,4 +443,94 @@ test('unexpected backend failures are sanitized and logs omit raw messages', asy
     (error) => code('internal')(error) && !error.message.includes('SECRET'),
   );
   assert.equal(JSON.stringify(logs).includes('SECRET'), false);
+});
+
+for (const contract of [null, itineraryDraftExtractionContractVersion, supplierExtractionContractVersion]) {
+  for (const status of ['queued', 'processing']) {
+    for (const historical of [true, false]) {
+      test(`recovery ${contract ?? 'legacy'} ${status} historical=${historical} is atomic and explicit`, async () => {
+        const f = fixture(contract ? {extractionContractVersion: contract} : {});
+        f.addJob('old', status, contract);
+        const old = f.records.get(`${jobsPath}/old`);
+        if (!historical) old.staleAfter = Timestamp.fromMillis(901000);
+        f.now = 900999;
+        assert.equal((await f.run()).jobId, 'old');
+        assert.equal(f.creates.length, 0);
+        f.now = 901000;
+        const [a, b] = await Promise.all([f.run(), f.run()]);
+        assert.equal(a.jobId, b.jobId);
+        assert.equal(f.creates.length, 1);
+        assert.equal([a, b].filter(x => x.createdNew).length, 1);
+        const terminal = f.records.get(`${jobsPath}/old`);
+        assert.equal(terminal.status, 'failed');
+        assert.equal(terminal.failureCode, `${status}_stale`);
+        assert.equal(terminal.staleAfter, null);
+        assert.equal(terminal.extractionContractVersion, old.extractionContractVersion);
+        const replacement = f.records.get(`${jobsPath}/${a.jobId}`);
+        const parsed = require('../lib/itineraryExtraction/extractionJob').parseExtractionJobRecord(replacement,
+          {isTimestamp: x => x instanceof Timestamp});
+        assert.equal(parsed.extractionContractVersion, contract ?? itineraryDraftExtractionContractVersion);
+        assert.equal(parsed.resultType, contract === supplierExtractionContractVersion ? 'supplier_extraction' : 'itinerary_draft');
+        assert.equal(replacement.staleAfter.toMillis(), f.now + 900000);
+        assert.equal(f.logs.filter(x => x.event === 'itinerary-extraction-stale-active-job-replaced').length, 1);
+        assert.equal((await f.run()).jobId, a.jobId);
+        assert.equal(f.creates.length, 1);
+      });
+    }
+  }
+}
+for (const malformed of [null, 'tomorrow', 123, {}, undefined]) {
+  test(`malformed recovery timestamp ${JSON.stringify(malformed)} fails closed`, async () => {
+    const f = fixture(); f.addJob('old', 'processing');
+    f.records.get(`${jobsPath}/old`).staleAfter = malformed;
+    await assert.rejects(f.run(), code('internal'));
+    assert.equal(f.creates.length, 0);
+    assert.equal(f.records.get(`${jobsPath}/old`).status, 'processing');
+  });
+}
+for (const who of ['agent-2', 'inactive', 'missing']) {
+  test(`stale recovery authorization rejects ${who} without writes`, async () => {
+    const f = fixture(); f.addJob('old', 'processing'); f.now = 1000000;
+    f.records.set('users/inactive', {role: 'agent', status: 'inactive'});
+    await assert.rejects(f.run({auth: {uid: who, token: {email: `${who}@kholidaymaps.com`}}, data: input}), code('permission-denied'));
+    assert.equal(f.records.get(`${jobsPath}/old`).status, 'processing');
+    assert.equal(f.creates.length, 0);
+  });
+}
+test('Admin explicitly recovers another owner stale job', async () => {
+  const f = fixture(); f.addJob('old', 'queued'); f.now = 1000000;
+  assert.equal((await f.run({auth: {uid: 'admin-1', token: {email: 'admin@kholidaymaps.com'}}, data: input})).createdNew, true);
+  assert.equal(f.records.get(`${jobsPath}/old`).failureCode, 'queued_stale');
+});
+for (const requested of [itineraryDraftExtractionContractVersion, supplierExtractionContractVersion]) {
+  test(`stale other-contract attempt is untouched for ${requested}`, async () => {
+    const f = fixture({extractionContractVersion: requested});
+    const other = requested === itineraryDraftExtractionContractVersion ? supplierExtractionContractVersion : itineraryDraftExtractionContractVersion;
+    f.addJob('other', 'processing', other); f.now = 1000000;
+    assert.equal((await f.run()).createdNew, true);
+    assert.equal(f.records.get(`${jobsPath}/other`).status, 'processing');
+  });
+}
+test('recovered V1 attempt cannot claim, fail again, or write a late draft', async () => {
+  const {adminExtractionJobStore} = require('../lib/itineraryExtraction/processorAdmin');
+  const f = fixture(); f.addJob('old', 'queued');
+  const store = adminExtractionJobStore(f.db);
+  const claim = await store.claimQueuedJob('trip-1', 'old', itineraryDraftExtractionContractVersion);
+  const deadline = f.records.get(`${jobsPath}/old`).staleAfter.toMillis();
+  f.now = deadline;
+  const replacement = await f.run();
+  await assert.rejects(store.claimQueuedJob('trip-1', 'old', itineraryDraftExtractionContractVersion));
+  await assert.rejects(store.markJobFailed(claim, 'extraction_failed'));
+  await assert.rejects(store.finalizeCompletedJob(claim, {tripId: 'trip-1', createdByUid: 'agent-1', sourcePackageIds: ['package-1']}));
+  assert.equal([...f.records.keys()].some(x => x.includes('/itinerary_drafts/')), false);
+  assert.equal(f.records.get(`${jobsPath}/old`).failureCode, 'processing_stale');
+  await store.claimQueuedJob('trip-1', replacement.jobId, itineraryDraftExtractionContractVersion);
+  await assert.rejects(store.claimQueuedJob('trip-1', replacement.jobId, itineraryDraftExtractionContractVersion));
+});
+
+test('committed recovery logs only safe operational identities and categories', async () => {
+  const f = fixture(); f.addJob('old', 'processing'); f.now = 1000000;
+  await f.run();
+  const recovery = f.logs.find(x => x.event === 'itinerary-extraction-stale-active-job-replaced');
+  assert.deepEqual(Object.keys(recovery).sort(), ['event', 'extractionContractVersion', 'failureCode', 'functionName', 'newJobId', 'oldJobId', 'priorStatus', 'tripId']);
 });

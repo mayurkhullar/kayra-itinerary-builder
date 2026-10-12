@@ -1,3 +1,4 @@
+import {processingRecoveryWindowMs} from "./extractionJobRecovery";
 import {
   FieldValue,
   Firestore,
@@ -40,6 +41,9 @@ export function adminExtractionJobStore(db: Firestore): ExtractionJobStore {
         );
         transaction.update(jobReference, {
           ...processingExtractionJobUpdate(record),
+          staleAfter: Timestamp.fromMillis(
+            Timestamp.now().toMillis() + processingRecoveryWindowMs,
+          ),
           updatedAt: FieldValue.serverTimestamp(),
         });
         return job;

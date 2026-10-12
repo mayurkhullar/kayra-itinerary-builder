@@ -53,6 +53,8 @@ enum KayraItineraryExtractionResultType {
 enum KayraItineraryExtractionPersistenceShape { legacy, versioned }
 
 enum KayraItineraryExtractionFailureCode {
+  queuedStale('queued_stale'),
+  processingStale('processing_stale'),
   sourceUnavailable('source_unavailable'),
   unsupportedSource('unsupported_source'),
   extractionFailed('extraction_failed'),
@@ -86,6 +88,7 @@ final class KayraItineraryExtractionJob {
     this.resultingDraftId,
     this.resultingExtractionId,
     this.failureCode,
+    this.staleAfter,
     required DateTime createdAt,
     required DateTime updatedAt,
   }) : id = ItineraryModelValidation.id(id, 'itinerary extraction job'),
@@ -100,6 +103,13 @@ final class KayraItineraryExtractionJob {
        ),
        createdAt = createdAt.toUtc(),
        updatedAt = updatedAt.toUtc() {
+    if (staleAfter != null &&
+        status != KayraItineraryExtractionStatus.queued &&
+        status != KayraItineraryExtractionStatus.processing) {
+      throw const FormatException(
+        'Terminal extraction cannot have a recovery deadline.',
+      );
+    }
     _validateContract();
     _validateOutcome();
   }
@@ -131,6 +141,7 @@ final class KayraItineraryExtractionJob {
       'failureCode',
       'createdAt',
       'updatedAt',
+      if (data.containsKey('staleAfter')) 'staleAfter',
       if (persistenceShape ==
           KayraItineraryExtractionPersistenceShape.versioned)
         ...versionFields,
@@ -148,6 +159,13 @@ final class KayraItineraryExtractionJob {
         ? KayraItineraryExtractionResultType.itineraryDraft
         : KayraItineraryExtractionResultType.parse(data['resultType']);
     final rawFailureCode = data['failureCode'];
+    if (data.containsKey('staleAfter') &&
+        data['staleAfter'] == null &&
+        (data['status'] == 'queued' || data['status'] == 'processing')) {
+      throw const FormatException(
+        'Active extraction requires a typed recovery deadline.',
+      );
+    }
     return KayraItineraryExtractionJob(
       id: documentId,
       tripId: ItineraryModelValidation.string(data['tripId']),
@@ -169,6 +187,9 @@ final class KayraItineraryExtractionJob {
       failureCode: rawFailureCode == null
           ? null
           : KayraItineraryExtractionFailureCode.parse(rawFailureCode),
+      staleAfter: data['staleAfter'] == null
+          ? null
+          : ItineraryModelValidation.dateTime(data['staleAfter']),
       createdAt: ItineraryModelValidation.dateTime(data['createdAt']),
       updatedAt: ItineraryModelValidation.dateTime(data['updatedAt']),
     );
@@ -185,6 +206,15 @@ final class KayraItineraryExtractionJob {
   final String? resultingDraftId;
   final String? resultingExtractionId;
   final KayraItineraryExtractionFailureCode? failureCode;
+  final DateTime? staleAfter;
+  // Mirrors the backend's conservative policy for historical active records.
+  static const recoveryWindow = Duration(minutes: 15);
+  DateTime? get recoveryDeadline =>
+      status == KayraItineraryExtractionStatus.queued ||
+          status == KayraItineraryExtractionStatus.processing
+      ? staleAfter?.toUtc() ?? updatedAt.add(recoveryWindow)
+      : null;
+
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -201,6 +231,7 @@ final class KayraItineraryExtractionJob {
     if (persistenceShape == KayraItineraryExtractionPersistenceShape.versioned)
       'resultingExtractionId': resultingExtractionId,
     'failureCode': failureCode?.value,
+    if (staleAfter != null) 'staleAfter': staleAfter!.toUtc(),
     'createdAt': createdAt,
     'updatedAt': updatedAt,
   };

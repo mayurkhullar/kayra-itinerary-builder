@@ -80,6 +80,22 @@ class SupplierSourceExtractionStatus extends StatelessWidget {
               ? 'Reading supplier itinerary…'
               : 'Building itinerary draft…',
         ),
+        ItineraryExtractionPackageStateKind.longRunning => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'This extraction is taking longer than expected.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: AppSpacing.s4),
+            TextButton(
+              key: ValueKey('retry-draft-$packageId'),
+              onPressed: onRequest,
+              child: const Text('Try again'),
+            ),
+          ],
+        ),
         ItineraryExtractionPackageStateKind.completed =>
           isSupplierExtraction && onReviewExtraction != null
               ? Column(

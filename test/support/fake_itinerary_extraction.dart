@@ -134,6 +134,7 @@ KayraItineraryExtractionJob fakeExtractionJob({
   KayraItineraryExtractionFailureCode? failureCode,
   DateTime? createdAt,
   DateTime? updatedAt,
+  DateTime? staleAfter,
 }) => KayraItineraryExtractionJob(
   id: id,
   tripId: tripId,
@@ -146,6 +147,12 @@ KayraItineraryExtractionJob fakeExtractionJob({
   resultingDraftId: resultingDraftId,
   resultingExtractionId: resultingExtractionId,
   failureCode: failureCode,
+  staleAfter:
+      staleAfter ??
+      (status == KayraItineraryExtractionStatus.queued ||
+              status == KayraItineraryExtractionStatus.processing
+          ? DateTime.utc(2099)
+          : null),
   createdAt: createdAt ?? DateTime.utc(2026, 9, 28, 8),
   updatedAt: updatedAt ?? DateTime.utc(2026, 9, 28, 8),
 );

@@ -175,6 +175,8 @@ for (const [name, claim, expected] of [
   ['wrong contract', {kind: 'not_applicable'}, {outcome: 'not_applicable', jobId}],
   ['already completed', {kind: 'already_completed', extractionId: jobId},
     {outcome: 'already_completed', jobId, extractionId: jobId}],
+  ['stale failed', {kind: 'terminal_failure', failureCode: 'processing_stale'},
+    {outcome: 'terminal_failure', jobId, failureCode: 'processing_stale'}],
   ['already failed', {kind: 'terminal_failure', failureCode: 'extraction_failed'},
     {outcome: 'terminal_failure', jobId, failureCode: 'extraction_failed'}],
   ['already processing', {kind: 'already_processing'},
