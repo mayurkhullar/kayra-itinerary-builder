@@ -534,3 +534,28 @@ test('committed recovery logs only safe operational identities and categories', 
   const recovery = f.logs.find(x => x.event === 'itinerary-extraction-stale-active-job-replaced');
   assert.deepEqual(Object.keys(recovery).sort(), ['event', 'extractionContractVersion', 'failureCode', 'functionName', 'newJobId', 'oldJobId', 'priorStatus', 'tripId']);
 });
+
+test('explicit completed V3 re-request preserves all historical import records', async () => {
+  const f = fixture({extractionContractVersion: supplierExtractionContractVersion});
+  f.addJob('completed-original', 'completed', supplierExtractionContractVersion);
+  f.records.get(`${jobsPath}/completed-original`).resultingExtractionId = 'completed-original';
+  const historical = [
+    `${jobsPath}/completed-original`,
+    'trips/trip-1/supplier_extractions/completed-original',
+    'trips/trip-1/supplier_extractions/completed-original/resolutions/completed-original',
+    'trips/trip-1/supplier_extractions/completed-original/resolutions/completed-original/decisions/title',
+    'trips/trip-1/supplier_extractions/completed-original/facts/fact-1',
+    'trips/trip-1/supplier_extractions/completed-original/resolutions/completed-original/finalizations/command-1',
+    'trips/trip-1/itinerary_drafts/original-draft',
+  ];
+  for (const path of historical.slice(1)) f.records.set(path, {immutableEvidence: path});
+  const before = historical.map(path => ({...f.records.get(path)}));
+  const first = await f.run();
+  const duplicate = await f.run();
+  assert.equal(first.createdNew, true);
+  assert.notEqual(first.jobId, 'completed-original');
+  assert.equal(duplicate.jobId, first.jobId);
+  assert.equal(duplicate.createdNew, false);
+  assert.equal(f.creates.length, 1);
+  assert.deepEqual(historical.map(path => f.records.get(path)), before);
+});

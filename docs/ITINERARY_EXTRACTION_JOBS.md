@@ -589,9 +589,39 @@ There is no provider call in the request path, scheduled Function, cron sweep,
 automatic request, extra model pass or new callable. A recovered attempt starts
 only through the existing create trigger after the consultant explicitly retries.
 A prior failed execution may already have consumed credits; recovery cannot
-recover that spend. V3/default cutover and deliberate completed-extraction rerun
-remain separate work. Production extraction remains **V2.4-only**. Rules already
+recover that spend. V3/default cutover remains separate work. Explicit completed-extraction
+re-request is described below. Production extraction remains **V2.4-only**. Rules already
 deny every client job write and are unchanged. Nothing is deployed by this task.
+
+### Explicit completed Supplier Extraction re-request (local implementation)
+
+A completed `supplier_extraction` review with a nonfinalized Resolution offers
+one secondary **Extract again** action. One confirmation explains that the same
+uploaded files will be used and the current extraction remains unchanged. Existing
+decisions/manual items add a warning that review changes are not copied. Opening,
+loading, cancelling or waiting never sends an extraction request. Confirmation
+refreshes the Resolution first; finalized or unreadable review state blocks the
+request. Finalized canonical views never offer this action.
+
+The existing controller/client sends the unchanged trip/package payload to
+`requestItineraryExtraction`. No force flag, new callable, client contract selector
+or provider call is added. The server already deduplicates only same-contract
+queued/processing attempts, so completed/failed history permits a fresh job ID.
+Existing active-job deduplication and explicit stale recovery still apply.
+
+The workspace adopts the returned job, including an already-active deduplicated
+job, and hides the old review while showing ordinary progress/failure UI. A new V3
+completion loads its new resulting extraction ID through a fresh review controller.
+The new immutable Snapshot has an independent Resolution lifecycle. Old jobs,
+Snapshots, review issues, Resolutions/decisions, receipts and canonical drafts are
+not modified or deleted; decisions are never copied. A failed replacement does not
+automatically restore the old review. No history/compare/restore UI is introduced.
+
+Production remains **V2.4-only**. A replacement returning a V2 draft uses ordinary
+V2 completed presentation; Flutter does not assume a V3 result. Existing completed
+V2 UI is unchanged. This local V3 review capability is not a production default
+cutover or a declaration of V3 readiness. No automatic model rerun, polling,
+scheduled request or extra pass is introduced; nothing is deployed.
 
 ### Recommended implementation checkpoints
 

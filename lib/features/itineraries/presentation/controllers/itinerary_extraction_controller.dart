@@ -105,27 +105,32 @@ final class ItineraryExtractionController extends ChangeNotifier {
         kind: ItineraryExtractionPackageStateKind.unavailable,
       );
     }
-    if (_requesting.contains(package.id)) {
+    return stateForPackage(package.id);
+  }
+
+  /// State of a trusted uploaded package, also used by explicit review reruns.
+  ItineraryExtractionPackageState stateForPackage(String packageId) {
+    if (_requesting.contains(packageId)) {
       return const ItineraryExtractionPackageState(
         kind: ItineraryExtractionPackageStateKind.requesting,
       );
     }
-    final requestError = _requestErrors[package.id];
+    final requestError = _requestErrors[packageId];
     if (requestError != null) {
       return ItineraryExtractionPackageState(
         kind: ItineraryExtractionPackageStateKind.error,
         message: requestError,
       );
     }
-    if (_observationErrors.contains(package.id) || _loadFailed) {
+    if (_observationErrors.contains(packageId) || _loadFailed) {
       return const ItineraryExtractionPackageState(
         kind: ItineraryExtractionPackageStateKind.error,
         message: 'We couldn’t build the itinerary draft. Please try again.',
       );
     }
-    final pending = _pendingStatuses[package.id];
+    final pending = _pendingStatuses[packageId];
     if (pending != null) return _stateForStatus(pending);
-    final job = _latestJobs[package.id];
+    final job = _latestJobs[packageId];
     if (job != null) {
       final deadline = _presentationDeadline(job);
       if (deadline != null && !_now().isBefore(deadline)) {

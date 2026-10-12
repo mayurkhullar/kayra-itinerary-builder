@@ -180,6 +180,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             tripId: _selectedTripId!,
                             extractionId: _selectedExtractionId!,
                             dependencies: _reviewDependencies,
+                            extractionDependencies: _extractionDependencies,
                             onBack: () =>
                                 setState(() => _selectedExtractionId = null),
                           )

@@ -2103,3 +2103,30 @@ The canonical/receipt payload index exemptions described in section 25.7 are
 local configuration only. No Rules/index deployment or production verification
 has occurred in this prerequisite task. Production extraction remains V2.4-only;
 V3 routing/defaults, providers, pricing and Supplier Import UX are unchanged.
+
+### Explicit re-extraction of completed review evidence (local implementation)
+
+A consultant may explicitly request another extraction from a completed V3
+Supplier Import review while its Resolution is not finalized. The secondary
+**Extract again** action requires one confirmation; existing decisions/manual
+items produce a warning that these changes will not be copied. No request occurs
+on page load, dialog open/cancel, completed status or a timer. Final confirmation
+re-reads Resolution state and fails closed on finalization or read failure.
+
+The unchanged extraction request API remains server-authoritative for access,
+contract selection, active-job deduplication and stale recovery. Terminal jobs
+already permit a fresh independent attempt. A new V3 job creates a distinct
+immutable Snapshot; previous Snapshot, review issues, Resolution, decisions,
+finalization receipts and canonical drafts remain historical evidence unchanged.
+No review decisions are copied and no Resolution is automatically created.
+
+After the request, returned new or deduplicated active job progress replaces old
+review controls. V3 completion creates a fresh review controller for the returned
+extraction identity; failed replacement uses existing failure UI, without automatic
+restoration. Finalized canonical imports cannot be re-extracted from this workflow.
+There is no extraction history UI or revision workflow in this change.
+
+Production remains **V2.4-only**, with no V2 completed rerun UI, new callable,
+client contract choice, automatic model rerun or extra AI pass. Any V2 replacement
+result uses ordinary V2 completion. V3 is not yet production-ready/default; this
+local implementation does not deploy or verify production.

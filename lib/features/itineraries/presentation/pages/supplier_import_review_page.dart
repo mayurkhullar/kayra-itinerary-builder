@@ -1,3 +1,9 @@
+import '../../data/itinerary_extraction_dependencies.dart';
+import '../../domain/kayra_itinerary_extraction_job.dart';
+import '../controllers/itinerary_extraction_controller.dart';
+import '../controllers/supplier_import_reextraction_controller.dart';
+import '../widgets/supplier_import/reextraction_confirmation.dart';
+import '../../../supplier_sources/presentation/widgets/supplier_source_extraction_status.dart';
 import '../../domain/supplier_import_finalization.dart';
 import '../widgets/supplier_import/review_issue_action.dart';
 import '../widgets/canonical/finalized_canonical_view.dart';
@@ -35,11 +41,13 @@ class SupplierImportReviewPage extends StatefulWidget {
     required this.extractionId,
     required this.dependencies,
     required this.onBack,
+    this.extractionDependencies,
   });
   final String tripId;
   final String extractionId;
   final SupplierImportReviewDependencies dependencies;
   final VoidCallback onBack;
+  final ItineraryExtractionDependencies? extractionDependencies;
   @override
   State<SupplierImportReviewPage> createState() =>
       _SupplierImportReviewPageState();
@@ -49,6 +57,50 @@ class _SupplierImportReviewPageState extends State<SupplierImportReviewPage> {
   late SupplierImportReviewController _controller;
   final _noticeKey = GlobalKey();
   bool _decisionDialogOpen = false;
+  bool _reextractionDialogOpen = false;
+  SupplierImportReextractionController? _reextraction;
+  String? _replacementScheduled;
+
+  Future<void> _extractAgain() async {
+    final rerun = _reextraction;
+    if (_reextractionDialogOpen || rerun == null || !rerun.canRequest) return;
+    _reextractionDialogOpen = true;
+    final bool? confirmed;
+    try {
+      confirmed = await showDialog<bool>(
+        context: context,
+        builder: (_) =>
+            ReextractionConfirmation(hasReviewChanges: rerun.hasReviewChanges),
+      );
+    } finally {
+      _reextractionDialogOpen = false;
+    }
+    if (!mounted || rerun != _reextraction || confirmed != true) return;
+    await rerun.requestConfirmed();
+  }
+
+  void _replacementChanged() {
+    if (!mounted) return;
+    final replacement = _reextraction?.replacement;
+    final id = replacement?.resultingExtractionId;
+    if (replacement?.kind == ItineraryExtractionPackageStateKind.completed &&
+        replacement?.resultType ==
+            KayraItineraryExtractionResultType.supplierExtraction &&
+        id != null &&
+        id != _controller.extractionId &&
+        _replacementScheduled != id) {
+      _replacementScheduled = id;
+      final previous = _reextraction;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _reextraction != previous) return;
+        setState(() {
+          _release();
+          _initialize(extractionId: id);
+        });
+      });
+    }
+    setState(() {});
+  }
 
   Future<void> _reviewService(SupplierExtractionServiceFact service) =>
       _reviewDecision(
@@ -123,11 +175,18 @@ class _SupplierImportReviewPageState extends State<SupplierImportReviewPage> {
     _initialize();
   }
 
-  void _initialize() {
+  void _initialize({String? extractionId}) {
     _controller = widget.dependencies.createController(
       widget.tripId,
-      widget.extractionId,
+      extractionId ?? widget.extractionId,
     )..addListener(_changed);
+    final dependencies = widget.extractionDependencies;
+    if (dependencies != null) {
+      _reextraction = SupplierImportReextractionController(
+        review: _controller,
+        dependencies: dependencies,
+      )..addListener(_replacementChanged);
+    }
     _controller.load();
   }
 
@@ -140,13 +199,18 @@ class _SupplierImportReviewPageState extends State<SupplierImportReviewPage> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.tripId != widget.tripId ||
         oldWidget.extractionId != widget.extractionId ||
-        oldWidget.dependencies != widget.dependencies) {
+        oldWidget.dependencies != widget.dependencies ||
+        oldWidget.extractionDependencies != widget.extractionDependencies) {
       _release();
       _initialize();
     }
   }
 
   void _release() {
+    _reextraction?.removeListener(_replacementChanged);
+    _reextraction?.dispose();
+    _reextraction = null;
+    _replacementScheduled = null;
     _controller
       ..removeListener(_changed)
       ..dispose();
@@ -167,6 +231,33 @@ class _SupplierImportReviewPageState extends State<SupplierImportReviewPage> {
         draft: state.draft!,
         onBack: widget.onBack,
         onRefresh: _controller.refresh,
+      );
+    }
+    final replacement = _reextraction?.replacement;
+    if (replacement != null) {
+      return SingleChildScrollView(
+        child: KayraContentFrame(
+          maxWidth: AppLayout.dashboardMaxContentWidth,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.s24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextButton.icon(
+                  onPressed: widget.onBack,
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  label: const Text('Back to Trip Workspace'),
+                ),
+                const SizedBox(height: AppSpacing.s24),
+                SupplierSourceExtractionStatus(
+                  packageId: _reextraction!.packageId!,
+                  state: replacement,
+                  onRequest: () => _reextraction!.retry(),
+                ),
+              ],
+            ),
+          ),
+        ),
       );
     }
     final sealed = loaded is SupplierImportReviewFinalized;
@@ -226,6 +317,11 @@ class _SupplierImportReviewPageState extends State<SupplierImportReviewPage> {
                 runSpacing: AppSpacing.s12,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
+                  if (_reextraction?.canRequest ?? false)
+                    TextButton(
+                      onPressed: _extractAgain,
+                      child: const Text('Extract again'),
+                    ),
                   if (loaded != null)
                     Semantics(
                       liveRegion: true,
